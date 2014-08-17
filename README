@@ -1,0 +1,19 @@
+** A nifty little folder diffing tool written using Win32 APIs **
+
+- It has a clean GUI.
+- Currently supports only non-recursive comparisons.
+- Compares files based on name, size and modified date.
+- Developed for the Windows platform and tested on Windows 7.
+
+- The tool also gives user the ability to delete the files, 
+  either only duplicate files or any files of the user's choice.
+- User can sort the file list by any of the four columns:
+  Name, Duplicacy Type, Modified Date, Size.
+
+Features to come:
+- Drag n drop files among the two folders being compared
+- Recursive folder comparison
+- Compare files based on their SHA256 hash values
+
+Author:
+Shishir Bhat (http://www.shishirprasad.net)
