@@ -228,8 +228,11 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 
             if(fRetVal)
             {
-                uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
-                UpdateFileListViews(&uiInfo);
+                BuildDirTree(uiInfo.szFolderpathLeft, &uiInfo.pLeftDirInfo);
+                PrintDirTree(uiInfo.pLeftDirInfo);
+
+                //uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
+                //UpdateFileListViews(&uiInfo);
             }
             return TRUE;
         }
@@ -265,7 +268,7 @@ BOOL UpdateDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ PDIRINFO* ppDirInfo)
         *ppDirInfo = NULL;
     }
 
-    return BuildDirInfo(pszFolderpath, ppDirInfo);
+    return BuildDirInfo(pszFolderpath, FALSE, ppDirInfo);
 }
 
 BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo)

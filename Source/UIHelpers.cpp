@@ -147,10 +147,8 @@ error_return:
     return FALSE;
 }
 
-BOOL BuildDirInfo(_In_z_ PCWSTR pszFolderpath, _Out_ PDIRINFO *ppDirInfo)
+BOOL BuildDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIRINFO *ppDirInfo)
 {
-    PDIRINFO pDir = NULL;
-
     // Check if folder exists or not
     if(!PathFileExists(pszFolderpath))
     {
@@ -158,7 +156,8 @@ BOOL BuildDirInfo(_In_z_ PCWSTR pszFolderpath, _Out_ PDIRINFO *ppDirInfo)
         goto error_return;
     }
     
-    if(!BuildFilesInDir(pszFolderpath, &pDir))
+    PDIRINFO pDir = NULL;
+    if(!BuildFilesInDir(pszFolderpath, NULL, &pDir))
     {
         logerr(L"Cannot list files in folder: %s", pszFolderpath);
         goto error_return;

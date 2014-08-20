@@ -20,6 +20,11 @@ BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ PFILEINFO pFileInfo)
     // Copy file/dir name over to the FILEINFO struct
     // TODO: Temporary work around of casting since the callee doesn't take a PCWSTR
     WCHAR* pszFilename = pszChlSzGetFilenameFromPath((WCHAR*)(void*)pszFullpathToFile, wcslen(pszFullpathToFile));
+    WCHAR pch = *pszFilename;
+    *pszFilename = 0;
+    wcscpy_s(pFileInfo->szPath, pszFullpathToFile);
+
+    *pszFilename = pch;
     wcscpy_s(pFileInfo->szFilename, ARRAYSIZE(pFileInfo->szFilename), pszFilename);
 
     // Check if file is a directory

@@ -42,6 +42,7 @@ typedef struct _FileInfo {
     SYSTEMTIME stModifiedTime;
     FILETIME ftModifiedTime;
 
+    WCHAR szPath[MAX_PATH];
     WCHAR szFilename[MAX_PATH];
 
 }FILEINFO, *PFILEINFO;

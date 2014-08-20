@@ -50,6 +50,19 @@ extern "C" {
 #define LL_VAL_LONGLONG 23
 #define LL_VAL_PTR      24
 
+// Key Types
+#define CHL_KT_STRING   10
+#define CHL_KT_INT32    11
+
+// Value Types
+#define CHL_VT_STRING   20
+#define CHL_VT_INT32    21
+#define CHL_VT_PVOID    22
+
+// Key type and Value type typedefs
+typedef int CHL_KEYTYPE;
+typedef int CHL_VALTYPE;
+
 typedef int HT_KEYTYPE;
 typedef int HT_VALTYPE;
 typedef int LL_VALTYPE;
@@ -65,6 +78,8 @@ union _val {
     void *pval;
     BYTE *pbVal;
 };
+
+#pragma region Structs_Hashtable
 
 // hashtable node
 typedef struct _hashTableNode {
@@ -95,6 +110,10 @@ typedef struct _hashtableIterator {
     HT_NODE *phtCurNodeInList;  // current position in the sibling list
 }CHL_HT_ITERATOR;
 
+#pragma endregion Structs_Hashtable
+
+#pragma region Structs_LinkedList
+
 // ******** Linked List ********
 union _nodeval {
     BYTE bval;
@@ -119,6 +138,24 @@ typedef struct _LinkedList {
     PLLNODE pTail;
     HANDLE hMuAccess;
 }CHL_LLIST, *PCHL_LLIST;
+
+#pragma endregion Structs_LinkedList
+
+// A Queue object structure
+typedef struct _Queue
+{
+    int nCapacity;  // unused currently
+    int nCurItems;
+    PCHL_LLIST pList;
+
+    // Access Methods
+    HRESULT (*Destroy)(struct _Queue* pThis);
+    HRESULT (*Insert)(struct _Queue* pThis, PVOID pVal, int nValSize);
+    HRESULT (*Delete)(struct _Queue* pThis, PVOID* ppVal);
+    HRESULT (*Peek)(struct _Queue* pThis, PVOID* ppVal);
+    HRESULT (*Find)(struct _Queue* pThis, PVOID pValToFind, BOOL (*pfnComparer)(void*, void*));
+}CHL_QUEUE, *PCHL_QUEUE;
+
 
 // ** Functions exported **
 
@@ -167,8 +204,17 @@ DllExpImp BOOL fChlDsCreateLL(__out PCHL_LLIST *ppLList, LL_VALTYPE valType, OPT
 DllExpImp BOOL fChlDsInsertLL(PCHL_LLIST pLList, void *pval, int valsize);
 DllExpImp BOOL fChlDsRemoveLL(PCHL_LLIST pLList, void *pvValToFind, BOOL fStopOnFirstFind, BOOL (*pfnComparer)(void*, void*), __out OPTIONAL void **ppval);
 DllExpImp BOOL fChlDsRemoveAtLL(PCHL_LLIST pLList, int iIndexToRemove, __out OPTIONAL void **ppval);
+DllExpImp BOOL fChlDsPeekAtLL(PCHL_LLIST pLList, int iIndexToPeek, __out void **ppval);
 DllExpImp BOOL fChlDsFindLL(PCHL_LLIST pLList, __in void *pvValToFind, BOOL (*pfnComparer)(void*, void*), __out OPTIONAL void **ppval);
 DllExpImp BOOL fChlDsDestroyLL(PCHL_LLIST pLList);
+
+// Queue Functions
+DllExpImp HRESULT CHL_QueueCreate(_Out_ PCHL_QUEUE *ppQueueObj, _In_ CHL_VALTYPE valType, _In_opt_ int nEstimatedItems);
+DllExpImp HRESULT CHL_QueueDestroy(_In_ PCHL_QUEUE pQueueObj);
+DllExpImp HRESULT CHL_QueueInsert(_In_ PCHL_QUEUE pQueueObj, _In_ PVOID pvValue, _In_ int nValSize);
+DllExpImp HRESULT CHL_QueueDelete(_In_ PCHL_QUEUE pQueueObj, _Out_ PVOID *ppvValue);
+DllExpImp HRESULT CHL_QueuePeek(_In_ PCHL_QUEUE pQueueObj, _Out_ PVOID *ppvValue);
+DllExpImp HRESULT CHL_QueueFind(_In_ PCHL_QUEUE pQueueObj, _In_ PVOID pvValue, _In_opt_ BOOL (*pfnComparer)(void*, void*));
 
 // Gui Functions
 DllExpImp BOOL fChlGuiCenterWindow(HWND hWnd);

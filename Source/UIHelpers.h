@@ -18,7 +18,7 @@ BOOL GetSelectedLvItemsText(
     _Out_ PWSTR *ppaszFiles, 
     _Out_ PINT pnItems, 
     _In_ int nMaxCharsEachItemText);
-BOOL BuildDirInfo(_In_z_ PCWSTR pszFolderpath, _Out_ PDIRINFO *ppDirInfo);
+BOOL BuildDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIRINFO *ppDirInfo);
 BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo);
 
 int CALLBACK lvCmpName(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);

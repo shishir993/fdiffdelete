@@ -9,6 +9,12 @@
 
 #include "DirectoryWalker.h"
 
+#define DDUP_NO_MATCH       0
+#define DDUP_SOME_MATCH     1
+#define DDUP_ALL_MATCH      2
+
+#define INIT_DUP_WITHIN_SIZE    32
+
 static WCHAR *g_apszBannedFilesFolders[] = 
 {
     L".",
@@ -21,8 +27,9 @@ static WCHAR *g_apszBannedFilesFolders[] =
 
 static void _ConvertToAscii(_In_ PCWSTR pwsz, _Out_ char* psz);
 static BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars);
+static BOOL AddToDupWithinList(_In_ DIRINFO::_dupWithin* pDupWithin, _In_ PFILEINFO pFileInfo);
 
-static HRESULT _Init(_In_ PCWSTR pszFolderpath, _Out_ PDIRINFO* ppDirInfo)
+static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_opt_ const PDIRINFO pParentDir, _Out_ PDIRINFO* ppDirInfo)
 {
     HRESULT hr = S_OK;
     PDIRINFO pDirInfo = (PDIRINFO)malloc(sizeof(DIRINFO));
@@ -32,15 +39,32 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _Out_ PDIRINFO* ppDirInfo)
         goto error_return;
     }
 
+    ZeroMemory(pDirInfo, sizeof(*pDirInfo));
     wcscpy_s(pDirInfo->pszPath, ARRAYSIZE(pDirInfo->pszPath), pszFolderpath);
-    pDirInfo->nFiles = 0;
+    //if(!fChlDsCreateLL(&pDirInfo->pllDirs, LL_VAL_PTR, 10))
+    //{
+    //    logerr(L"Couldn't create linked list for dir: %s", pszFolderpath);
+    //    hr = E_FAIL;
+    //    goto error_return;
+    //}
 
-    // Create the hashtable for holding file information
     if(!fChlDsCreateHT(&pDirInfo->phtFiles, 256, HT_KEY_STR, HT_VAL_PTR, TRUE))
     {
+        logerr(L"Couldn't create hash table for dir: %s", pszFolderpath);
         hr = E_FAIL;
         goto error_return;
     }
+
+    // Allocate an array of pointer for the dup within files
+    pDirInfo->stDupWithin.nCurSize = INIT_DUP_WITHIN_SIZE;
+    pDirInfo->stDupWithin.apFiles = (PFILEINFO*)malloc(sizeof(PFILEINFO) * INIT_DUP_WITHIN_SIZE);
+    if(pDirInfo->stDupWithin.apFiles == NULL)
+    {
+        hr = E_OUTOFMEMORY;
+        goto error_return;
+    }
+    
+    pDirInfo->pParentDirInfo = pParentDir;
 
     *ppDirInfo = pDirInfo;
     return hr;
@@ -54,10 +78,57 @@ error_return:
             fChlDsDestroyHT(pDirInfo->phtFiles);
         }
 
+        //if(pDirInfo->pllDirs != NULL)
+        //{
+        //    fChlDsDestroyLL(pDirInfo->pllDirs);
+        //}
+
+        if(pDirInfo->stDupWithin.apFiles != NULL)
+        {
+            free(pDirInfo->stDupWithin.apFiles);
+        }
+
         free(pDirInfo);
     }
-
     return hr;
+}
+
+void DestroyDirTree(_In_ PDIRINFO pRootDir)
+{
+    PCHL_QUEUE pqDirs = NULL;
+    if(FAILED(CHL_QueueCreate(&pqDirs, CHL_VT_PVOID, 30)))
+    {
+        logerr(L"Could not create queue for BFS destruction of dir: %s", pRootDir->pszPath);
+        goto done;
+    }
+
+    // Insert root as the first in queue
+    pqDirs->Insert(pqDirs, pRootDir, sizeof *pRootDir);
+    
+    PDIRINFO pCurDir = NULL;
+    while(SUCCEEDED(pqDirs->Delete(pqDirs, (PVOID*)&pCurDir)))
+    {
+        // Add all dirs in pCurDir to the queue
+        //PDIRINFO pSubDir;
+        //int index = 0;
+        //while(fChlDsPeekAtLL(pCurDir->pllDirs, index, (PVOID*)&pSubDir))
+        //{
+        //    pqDirs->Insert(pqDirs, pSubDir, sizeof *pSubDir);
+        //    ++index;
+        //}
+
+        // Now, destroy this pCurDir
+        DestroyDirInfo(pCurDir);
+    }
+
+    //NT_ASSERT(pqDirs->nCurItems == 0);
+
+done:
+    if(pqDirs != NULL)
+    {
+        pqDirs->Destroy(pqDirs);
+    }
+    return;
 }
 
 void DestroyDirInfo(_In_ PDIRINFO pDirInfo)
@@ -69,62 +140,81 @@ void DestroyDirInfo(_In_ PDIRINFO pDirInfo)
         fChlDsDestroyHT(pDirInfo->phtFiles);
     }
 
+    //if(pDirInfo->pllDirs != NULL)
+    //{
+    //    fChlDsDestroyLL(pDirInfo->pllDirs);
+    //}
+
+    if(pDirInfo->stDupWithin.apFiles != NULL)
+    {
+        free(pDirInfo->stDupWithin.apFiles);
+    }
+
     free(pDirInfo);
 }
 
-static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
+// Build a tree 
+BOOL BuildDirTree(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
 {
-    BOOL fRetVal = TRUE;
-    char szKey[MAX_PATH];
-
-    WCHAR pszFilepath[MAX_PATH] = L"";
-    wcscpy_s(pszFilepath, ARRAYSIZE(pszFilepath), pDirInfo->pszPath);
-
-    loginfo(L"Deleting file = %s", pFileInfo->szFilename);
-    wcscat_s(pszFilepath, ARRAYSIZE(pszFilepath), L"\\");
-    wcscat_s(pszFilepath, ARRAYSIZE(pszFilepath), pFileInfo->szFilename);
-    if(!DeleteFile(pszFilepath))
+    PCHL_QUEUE pqDirsToTraverse;
+    if(FAILED(CHL_QueueCreate(&pqDirsToTraverse, CHL_VT_PVOID, 20)))
     {
-        logerr(L"DeleteFile() failed.");
-        fRetVal = FALSE;
+        logerr(L"Could not create queue for BFS. Rootpath: %s", pszRootpath);
+        goto error_return;
     }
-    else
-    {   
-        // Remove from file list
-        // The hashtable supports only char* keys
-        _ConvertToAscii(pFileInfo->szFilename, szKey);
-        if(!fChlDsRemoveHT(pDirInfo->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1))
+
+    loginfo(L"Starting traversal for root dir: %s", pszRootpath);
+
+    // Init the first dir to traverse. 
+    // ** IMP: pFirst must be NULL here so that a new object is created in callee
+    PDIRINFO pFirstDir = NULL;
+    if(!BuildFilesInDir(pszRootpath, pqDirsToTraverse, &pFirstDir))
+    {
+        logerr(L"Could not build files in dir: %s", pszRootpath);
+        goto error_return;
+    }
+
+    PDIRINFO pDirToTraverse;
+    while(SUCCEEDED(pqDirsToTraverse->Delete(pqDirsToTraverse, (PVOID*)&pDirToTraverse)))
+    {
+        loginfo(L"Continuing traversal in dir: %s", pDirToTraverse->pszPath);
+        if(!BuildFilesInDir(pDirToTraverse->pszPath, pqDirsToTraverse, &pFirstDir))
         {
-            logwarn(L"Failed to remove file from list: %s", pFileInfo->szFilename);
-            fRetVal = FALSE;
+            logerr(L"Could not build files in dir: %s", pszRootpath);
+            goto error_return;
         }
-
-        --(pDirInfo->nFiles);
     }
 
-    return fRetVal;
+    *ppRootDir = pFirstDir;
+    return TRUE;
+
+error_return:
+    if(pqDirsToTraverse)
+    {
+        pqDirsToTraverse->Destroy(pqDirsToTraverse);
+    }
+    *ppRootDir = NULL;
+    return FALSE;
 }
 
 // Build the list of files in the given folder.
-BOOL BuildFilesInDir(_In_ PCWSTR pszFolderpath, _Out_ PDIRINFO* ppDirInfo)
+BOOL BuildFilesInDir(_In_ PCWSTR pszFolderpath, _In_opt_ PCHL_QUEUE pqDirsToTraverse, _Inout_ PDIRINFO* ppDirInfo)
 {
     //NT_ASSERT(pszFolderpath);
     //NT_ASSERT(ppDirInfo);
 
-    if(FAILED(_Init(pszFolderpath, ppDirInfo)))
+    if(*ppDirInfo == NULL && FAILED(_Init(pszFolderpath, NULL, ppDirInfo)))
     {
+        logerr(L"Init failed for dir: %s", pszFolderpath);
         goto error_return;
     }
 
     // Derefernce just to make it easier to code
-    PDIRINFO pDirInfo = *ppDirInfo;
-    char szKey[MAX_PATH];
-
-    WIN32_FIND_DATA findData;
-    WCHAR szSearchpath[MAX_PATH] = L"";
+    PDIRINFO pCurDirInfo = *ppDirInfo;
 
     // In order to list all files within the specified directory,
     // path sent to FindFirstFile must end with a "\\*"
+    WCHAR szSearchpath[MAX_PATH] = L"";
     wcscpy_s(szSearchpath, ARRAYSIZE(szSearchpath), pszFolderpath);
 
     int nLen = wcsnlen(pszFolderpath, MAX_PATH);
@@ -134,15 +224,18 @@ BOOL BuildFilesInDir(_In_ PCWSTR pszFolderpath, _Out_ PDIRINFO* ppDirInfo)
         wcscat_s(szSearchpath, ARRAYSIZE(szSearchpath), L"\\*");
     }
 
-    // Loop through the file list and add files into hashtable
+    // Initialize search for files in folder
+    WIN32_FIND_DATA findData;
     HANDLE hFindFile = FindFirstFile(szSearchpath, &findData);
     if(hFindFile == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND)
     {
         // No files found under the folder. Just return.
         return TRUE;
     }
-    else if(hFindFile == INVALID_HANDLE_VALUE)
+
+    if(hFindFile == INVALID_HANDLE_VALUE)
     {
+        logerr(L"FindFirstFile().");
         goto error_return;
     }
 
@@ -170,18 +263,60 @@ BOOL BuildFilesInDir(_In_ PCWSTR pszFolderpath, _Out_ PDIRINFO* ppDirInfo)
             continue;
         }
 
-        // The hashtable supports only char* keys
-        _ConvertToAscii(findData.cFileName, szKey);
-        if(!fChlDsInsertHT(
-                pDirInfo->phtFiles, 
-                szKey, strnlen_s(szKey, MAX_PATH) + 1, 
-                pFileInfo, sizeof(pFileInfo)))
+        // If pqDirsToTraverse is not null, it means caller wants recursive directory traversal
+        if(pqDirsToTraverse && pFileInfo->fIsDirectory)
         {
-            logerr(L"Cannot add to file list: %s", szSearchpath);
-            goto error_return;
-        }
+            PDIRINFO pSubDir;
+            if(FAILED(_Init(szSearchpath, pCurDirInfo, &pSubDir)))
+            {
+                logwarn(L"Unable to init dir info for: %s", szSearchpath);
+                free(pFileInfo);
+                continue;
+            }
 
-        ++(pDirInfo->nFiles);
+            // Insert into the current directory's dir list
+            //if(!fChlDsInsertLL(pCurDirInfo->pllDirs, pSubDir, sizeof(*pSubDir)))
+            //{
+            //    logwarn(L"Unable to add sub dir [%s] to list of dirs for dir: %s", findData.cFileName, pszFolderpath);
+            //    free(pFileInfo);
+            //    continue;
+            //}
+
+            // Insert pSubDir into the queue so that it will be traversed later
+            if(FAILED(pqDirsToTraverse->Insert(pqDirsToTraverse, pSubDir, sizeof *pSubDir)))
+            {
+                logwarn(L"Unable to add sub dir [%s] to traversal queue, cur dir: %s", findData.cFileName, pszFolderpath);
+                free(pFileInfo);
+                //fChlDsRemoveAtLL(pCurDirInfo->pllDirs, pCurDirInfo->pllDirs->nCurNodes - 1, NULL);
+                continue;
+            }
+            ++(pCurDirInfo->nDirs);
+        }
+        else
+        {
+            // The hashtable supports only char* keys
+            char szKey[MAX_PATH];
+            _ConvertToAscii(findData.cFileName, szKey);
+            int nSize = strnlen_s(szKey, MAX_PATH) + 1;
+
+            // If the current file's name is already inserted, then add it to the
+            // dup within list
+            if(fChlDsFindHT(pCurDirInfo->phtFiles, szKey, nSize, NULL, NULL))
+            {
+                AddToDupWithinList(&pCurDirInfo->stDupWithin, pFileInfo);
+            }
+            else
+            {
+                if(!fChlDsInsertHT(pCurDirInfo->phtFiles, szKey, nSize, pFileInfo, sizeof(pFileInfo)))
+                {
+                    logerr(L"Cannot add to file list: %s", szSearchpath);
+                    free(pFileInfo);
+                    goto error_return;
+                }
+            }
+
+            ++(pCurDirInfo->nFiles);
+        }
 
     } while(FindNextFile(hFindFile, &findData));
 
@@ -253,6 +388,41 @@ BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
 
 error_return:
     return FALSE;
+}
+
+#pragma region FileOperations
+
+static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
+{
+    BOOL fRetVal = TRUE;
+    char szKey[MAX_PATH];
+
+    WCHAR pszFilepath[MAX_PATH] = L"";
+    wcscpy_s(pszFilepath, ARRAYSIZE(pszFilepath), pDirInfo->pszPath);
+
+    loginfo(L"Deleting file = %s", pFileInfo->szFilename);
+    wcscat_s(pszFilepath, ARRAYSIZE(pszFilepath), L"\\");
+    wcscat_s(pszFilepath, ARRAYSIZE(pszFilepath), pFileInfo->szFilename);
+    if(!DeleteFile(pszFilepath))
+    {
+        logerr(L"DeleteFile() failed.");
+        fRetVal = FALSE;
+    }
+    else
+    {   
+        // Remove from file list
+        // The hashtable supports only char* keys
+        _ConvertToAscii(pFileInfo->szFilename, szKey);
+        if(!fChlDsRemoveHT(pDirInfo->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1))
+        {
+            logwarn(L"Failed to remove file from list: %s", pFileInfo->szFilename);
+            fRetVal = FALSE;
+        }
+
+        --(pDirInfo->nFiles);
+    }
+
+    return fRetVal;
 }
 
 void ClearFilesDupFlag(_In_ PDIRINFO pDirInfo)
@@ -405,9 +575,44 @@ BOOL DeleteFilesInDir(
     }
 
     return TRUE;
+}
 
-error_return:
-    return FALSE;
+#pragma endregion FileOperations
+
+// Print the dir tree in BFS order, two blank lines separating 
+// file listing of each directory
+void PrintDirTree(_In_ PDIRINFO pRootDir)
+{
+    PCHL_QUEUE pqDirs = NULL;
+    if(FAILED(CHL_QueueCreate(&pqDirs, CHL_VT_PVOID, 30)))
+    {
+        logerr(L"Could not create queue for BFS. Rootpath: %s", pRootDir->pszPath);
+        goto done;
+    }
+
+    // Insert root as the first in queue
+    pqDirs->Insert(pqDirs, pRootDir, sizeof *pRootDir);
+    
+    PDIRINFO pCurDir = NULL;
+    while(SUCCEEDED(pqDirs->Delete(pqDirs, (PVOID*)&pCurDir)))
+    {
+        // Add all dirs in pCurDir to the queue
+        //PDIRINFO pSubDir;
+        //int index = 0;
+        //while(fChlDsPeekAtLL(pCurDir->pllDirs, index, (PVOID*)&pSubDir))
+        //{
+        //    pqDirs->Insert(pqDirs, pSubDir, sizeof *pSubDir);
+        //    ++index;
+        //}
+
+        // Now, print files in pCurDir
+        PrintFilesInDir(pCurDir);
+        wprintf(L"\n");
+    }
+
+    //NT_ASSERT(pqDirs->nCurItems == 0);
+
+    return;
 }
 
 // Print files in the folder, one on each line. End on a blank line.
@@ -421,6 +626,8 @@ void PrintFilesInDir(_In_ PDIRINFO pDirInfo)
         logerr(L"fChlDsInitIteratorHT() failed.");
         return;
     }
+
+    wprintf(L"%s\n", pDirInfo->pszPath);
 
     int nKeySize, nValSize;
     char* pszFilename = NULL;
@@ -457,5 +664,18 @@ static BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars)
             return TRUE;
         }
     }
+    return FALSE;
+}
+
+static BOOL AddToDupWithinList(_In_ DIRINFO::_dupWithin* pDupWithin, _In_ PFILEINFO pFileInfo)
+{
+    if(pDupWithin->nCurFiles < pDupWithin->nCurSize)
+    {
+        pDupWithin->apFiles[pDupWithin->nCurFiles] = pFileInfo;
+        ++(pDupWithin->nCurFiles);
+        return TRUE;
+    }
+
+    // TODO: Realloc if size is insufficient
     return FALSE;
 }
