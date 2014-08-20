@@ -15,6 +15,8 @@
 #define ONE_MBYTES    (ONE_KBYTES * 1024ll)
 #define ONE_GBYTES    (ONE_MBYTES * 1024ll)
 
+static void ConstructListViewRow(_In_ PFILEINFO pFileInfo, _In_ PWSTR *apsz);
+
 HRESULT GetFolderToOpen(_Out_z_cap_(MAX_PATH) PWSTR pszFolderpath)
 {
     // Sample from: http://msdn.microsoft.com/en-us/library/windows/desktop/ff485843%28v=vs.85%29.aspx
@@ -157,10 +159,21 @@ BOOL BuildDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIRI
     }
     
     PDIRINFO pDir = NULL;
-    if(!BuildFilesInDir(pszFolderpath, NULL, &pDir))
+    if(fRecursive)
     {
-        logerr(L"Cannot list files in folder: %s", pszFolderpath);
-        goto error_return;
+        if(!BuildDirTree(pszFolderpath, &pDir))
+        {
+            logerr(L"Cannot recursive build files in folder: %s", pszFolderpath);
+            goto error_return;
+        }
+    }
+    else
+    {
+        if(!BuildFilesInDir(pszFolderpath, NULL, &pDir))
+        {
+            logerr(L"Cannot list files in folder: %s", pszFolderpath);
+            goto error_return;
+        }
     }
 
     *ppDirInfo = pDir;
@@ -191,62 +204,34 @@ BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo)
     PFILEINFO pFileInfo;
     int nKeySize, nValSize;
 
-    WCHAR szName[MAX_PATH];
     WCHAR szDupType[10];    // N,S,D,H (name, size, date, hash)
     WCHAR szDateTime[32];   // 08/13/2014 5:55 PM
     WCHAR szSize[16];       // formatted to show KB, MB, GB
-    PWCHAR pszSizeMarker;
-
-    PWCHAR apszListRow[4] = {szName, szDupType, szDateTime, szSize };
-
-    static WCHAR aszSizeMarkers[][3] = {L"B", L"KB", L"MB", L"GB"};
+    
+    PWCHAR apszListRow[] = {NULL, szDupType, NULL, szDateTime, szSize};
 
     // For each file in the dir, convert relevant attributes into 
     // strings and insert into the list view row by row
     BOOL fRetVal = TRUE;
     while(fChlDsGetNextHT(pDirInfo->phtFiles, &itr, &pszKey, &nKeySize, &pFileInfo, &nValSize))
     {
-        wcscpy_s(szName, ARRAYSIZE(szName), pFileInfo->szFilename);
-        GetDupTypeString(pFileInfo, szDupType);
-
-        LONGLONG llFileSize = pFileInfo->llFilesize.QuadPart;
-
-        if(pFileInfo->fIsDirectory)
-        {
-            szSize[0] = 0;
-        }
-        else
-        {
-            if(llFileSize >= ONE_GBYTES)
-            {
-                llFileSize /= ONE_GBYTES;
-                pszSizeMarker = aszSizeMarkers[3];
-            }
-            else if(llFileSize >= ONE_MBYTES)
-            {
-                llFileSize /= ONE_MBYTES;
-                pszSizeMarker = aszSizeMarkers[2];
-            }
-            else if(llFileSize >= ONE_GBYTES)
-            {
-                llFileSize /= ONE_KBYTES;
-                pszSizeMarker = aszSizeMarkers[1];
-            }
-            else
-            {
-                pszSizeMarker = aszSizeMarkers[0];
-            }
-
-            swprintf_s(szSize, L"%lld %s", llFileSize, pszSizeMarker);
-        }
-
-        swprintf_s(szDateTime, ARRAYSIZE(szDateTime), L"%02d/%02d/%d  %02d:%02d",
-          pFileInfo->stModifiedTime.wMonth, pFileInfo->stModifiedTime.wDay, pFileInfo->stModifiedTime.wYear,
-          pFileInfo->stModifiedTime.wHour, pFileInfo->stModifiedTime.wMinute);
-
+        ConstructListViewRow(pFileInfo, apszListRow);
         if(!fChlGuiAddListViewRow(hList, apszListRow, ARRAYSIZE(apszListRow), (LPARAM)pFileInfo))
         {
             logerr(L"Error inserting into file list");
+            fRetVal = FALSE;
+            break;
+        }
+    }
+
+    // Now, add the dup name
+    for(int i = 0; i < pDirInfo->stDupWithin.nCurFiles; ++i)
+    {
+        PFILEINFO pFile = pDirInfo->stDupWithin.apFiles[i];
+        ConstructListViewRow(pFile, apszListRow);
+        if(!fChlGuiAddListViewRow(hList, apszListRow, ARRAYSIZE(apszListRow), (LPARAM)pFileInfo))
+        {
+            logerr(L"Error inserting dup within into file list");
             fRetVal = FALSE;
             break;
         }
@@ -259,6 +244,50 @@ BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo)
     }
 
     return fRetVal;
+}
+
+static void ConstructListViewRow(_In_ PFILEINFO pFileInfo, _In_ PWSTR *apsz)
+{
+    apsz[0] = pFileInfo->szFilename;
+    GetDupTypeString(pFileInfo, apsz[1]);
+    apsz[2] = pFileInfo->szPath;
+
+    swprintf_s(apsz[3], 32, L"%02d/%02d/%d  %02d:%02d",
+        pFileInfo->stModifiedTime.wMonth, pFileInfo->stModifiedTime.wDay, pFileInfo->stModifiedTime.wYear,
+        pFileInfo->stModifiedTime.wHour, pFileInfo->stModifiedTime.wMinute);
+
+    LONGLONG llFileSize = pFileInfo->llFilesize.QuadPart;
+
+    PWCHAR pszSizeMarker;
+    if(pFileInfo->fIsDirectory)
+    {
+        apsz[4] = 0;
+    }
+    else
+    {
+        static WCHAR aszSizeMarkers[][3] = {L"B", L"KB", L"MB", L"GB"};
+        if(llFileSize >= ONE_GBYTES)
+        {
+            llFileSize /= ONE_GBYTES;
+            pszSizeMarker = aszSizeMarkers[3];
+        }
+        else if(llFileSize >= ONE_MBYTES)
+        {
+            llFileSize /= ONE_MBYTES;
+            pszSizeMarker = aszSizeMarkers[2];
+        }
+        else if(llFileSize >= ONE_GBYTES)
+        {
+            llFileSize /= ONE_KBYTES;
+            pszSizeMarker = aszSizeMarkers[1];
+        }
+        else
+        {
+            pszSizeMarker = aszSizeMarkers[0];
+        }
+
+        swprintf_s(apsz[4], 16, L"%lld %s", llFileSize, pszSizeMarker);
+    }
 }
 
 // ** Listview sorting Callbacks
@@ -318,6 +347,27 @@ int CALLBACK lvCmpDupType(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
         return -1;
         
     return 1;
+}
+
+int CALLBACK lvCmpPath(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
+{
+    LVITEM lv1;
+    LVITEM lv2;
+
+    ZeroMemory(&lv1, sizeof(lv1));
+    ZeroMemory(&lv2, sizeof(lv2));
+
+    lv1.iItem = (int)lParam1;
+    lv1.mask = LVIF_PARAM;
+
+    lv2.iItem = (int)lParam2;
+    lv2.mask = LVIF_PARAM;
+
+    HWND hList = (HWND)lParamSort;
+    SendMessage(hList, LVM_GETITEM, 0, (LPARAM)&lv1);
+    SendMessage(hList, LVM_GETITEM, 0, (LPARAM)&lv2);
+
+    return _wcsnicmp(((PFILEINFO)lv1.lParam)->szPath, ((PFILEINFO)lv2.lParam)->szPath, MAX_PATH);
 }
 
 int CALLBACK lvCmpDate(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)

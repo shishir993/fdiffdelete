@@ -28,6 +28,7 @@ static WCHAR *g_apszBannedFilesFolders[] =
 static void _ConvertToAscii(_In_ PCWSTR pwsz, _Out_ char* psz);
 static BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars);
 static BOOL AddToDupWithinList(_In_ DIRINFO::_dupWithin* pDupWithin, _In_ PFILEINFO pFileInfo);
+static BOOL FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ DIRINFO::_dupWithin* pDupWithinToSearch, _Out_ PFILEINFO *ppFoundFile);
 
 static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_opt_ const PDIRINFO pParentDir, _Out_ PDIRINFO* ppDirInfo)
 {
@@ -41,12 +42,6 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_opt_ const PDIRINFO pParentD
 
     ZeroMemory(pDirInfo, sizeof(*pDirInfo));
     wcscpy_s(pDirInfo->pszPath, ARRAYSIZE(pDirInfo->pszPath), pszFolderpath);
-    //if(!fChlDsCreateLL(&pDirInfo->pllDirs, LL_VAL_PTR, 10))
-    //{
-    //    logerr(L"Couldn't create linked list for dir: %s", pszFolderpath);
-    //    hr = E_FAIL;
-    //    goto error_return;
-    //}
 
     if(!fChlDsCreateHT(&pDirInfo->phtFiles, 256, HT_KEY_STR, HT_VAL_PTR, TRUE))
     {
@@ -63,8 +58,6 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_opt_ const PDIRINFO pParentD
         hr = E_OUTOFMEMORY;
         goto error_return;
     }
-    
-    pDirInfo->pParentDirInfo = pParentDir;
 
     *ppDirInfo = pDirInfo;
     return hr;
@@ -78,11 +71,6 @@ error_return:
             fChlDsDestroyHT(pDirInfo->phtFiles);
         }
 
-        //if(pDirInfo->pllDirs != NULL)
-        //{
-        //    fChlDsDestroyLL(pDirInfo->pllDirs);
-        //}
-
         if(pDirInfo->stDupWithin.apFiles != NULL)
         {
             free(pDirInfo->stDupWithin.apFiles);
@@ -93,44 +81,6 @@ error_return:
     return hr;
 }
 
-void DestroyDirTree(_In_ PDIRINFO pRootDir)
-{
-    PCHL_QUEUE pqDirs = NULL;
-    if(FAILED(CHL_QueueCreate(&pqDirs, CHL_VT_PVOID, 30)))
-    {
-        logerr(L"Could not create queue for BFS destruction of dir: %s", pRootDir->pszPath);
-        goto done;
-    }
-
-    // Insert root as the first in queue
-    pqDirs->Insert(pqDirs, pRootDir, sizeof *pRootDir);
-    
-    PDIRINFO pCurDir = NULL;
-    while(SUCCEEDED(pqDirs->Delete(pqDirs, (PVOID*)&pCurDir)))
-    {
-        // Add all dirs in pCurDir to the queue
-        //PDIRINFO pSubDir;
-        //int index = 0;
-        //while(fChlDsPeekAtLL(pCurDir->pllDirs, index, (PVOID*)&pSubDir))
-        //{
-        //    pqDirs->Insert(pqDirs, pSubDir, sizeof *pSubDir);
-        //    ++index;
-        //}
-
-        // Now, destroy this pCurDir
-        DestroyDirInfo(pCurDir);
-    }
-
-    //NT_ASSERT(pqDirs->nCurItems == 0);
-
-done:
-    if(pqDirs != NULL)
-    {
-        pqDirs->Destroy(pqDirs);
-    }
-    return;
-}
-
 void DestroyDirInfo(_In_ PDIRINFO pDirInfo)
 {
     //NT_ASSERT(pDirInfo);
@@ -139,11 +89,6 @@ void DestroyDirInfo(_In_ PDIRINFO pDirInfo)
     {
         fChlDsDestroyHT(pDirInfo->phtFiles);
     }
-
-    //if(pDirInfo->pllDirs != NULL)
-    //{
-    //    fChlDsDestroyLL(pDirInfo->pllDirs);
-    //}
 
     if(pDirInfo->stDupWithin.apFiles != NULL)
     {
@@ -184,6 +129,8 @@ BOOL BuildDirTree(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
             goto error_return;
         }
     }
+
+    pqDirsToTraverse->Destroy(pqDirsToTraverse);
 
     *ppRootDir = pFirstDir;
     return TRUE;
@@ -274,20 +221,11 @@ BOOL BuildFilesInDir(_In_ PCWSTR pszFolderpath, _In_opt_ PCHL_QUEUE pqDirsToTrav
                 continue;
             }
 
-            // Insert into the current directory's dir list
-            //if(!fChlDsInsertLL(pCurDirInfo->pllDirs, pSubDir, sizeof(*pSubDir)))
-            //{
-            //    logwarn(L"Unable to add sub dir [%s] to list of dirs for dir: %s", findData.cFileName, pszFolderpath);
-            //    free(pFileInfo);
-            //    continue;
-            //}
-
             // Insert pSubDir into the queue so that it will be traversed later
             if(FAILED(pqDirsToTraverse->Insert(pqDirsToTraverse, pSubDir, sizeof *pSubDir)))
             {
                 logwarn(L"Unable to add sub dir [%s] to traversal queue, cur dir: %s", findData.cFileName, pszFolderpath);
                 free(pFileInfo);
-                //fChlDsRemoveAtLL(pCurDirInfo->pllDirs, pCurDirInfo->pllDirs->nCurNodes - 1, NULL);
                 continue;
             }
             ++(pCurDirInfo->nDirs);
@@ -384,6 +322,20 @@ BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
         }
     }
 
+    // See if dup within files are duplicate
+    for(int i = 0; i < pLeftDir->stDupWithin.nCurFiles; ++i)
+    {
+        pLeftFile = pLeftDir->stDupWithin.apFiles[i];
+        if(FindInDupWithinList(pLeftFile->szFilename, &pRightDir->stDupWithin, &pRightFile))
+        {
+            // Same file found in right dir, compare and mark as duplicate
+            if(CompareFileInfoAndMark(pLeftFile, pRightFile))
+            {
+                logdbg(L"DupWithin Duplicate file: %S", pszLeftFile);
+            }
+        }
+    }
+
     return TRUE;
 
 error_return:
@@ -398,7 +350,7 @@ static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
     char szKey[MAX_PATH];
 
     WCHAR pszFilepath[MAX_PATH] = L"";
-    wcscpy_s(pszFilepath, ARRAYSIZE(pszFilepath), pDirInfo->pszPath);
+    wcscpy_s(pszFilepath, ARRAYSIZE(pszFilepath), pFileInfo->szPath);
 
     loginfo(L"Deleting file = %s", pFileInfo->szFilename);
     wcscat_s(pszFilepath, ARRAYSIZE(pszFilepath), L"\\");
@@ -583,34 +535,23 @@ BOOL DeleteFilesInDir(
 // file listing of each directory
 void PrintDirTree(_In_ PDIRINFO pRootDir)
 {
-    PCHL_QUEUE pqDirs = NULL;
-    if(FAILED(CHL_QueueCreate(&pqDirs, CHL_VT_PVOID, 30)))
+    PrintFilesInDir(pRootDir);
+    wprintf(L"\n");
+
+    // Print any dup within files
+    if(pRootDir->stDupWithin.nCurFiles > 0)
     {
-        logerr(L"Could not create queue for BFS. Rootpath: %s", pRootDir->pszPath);
-        goto done;
+        wprintf(L"These are the files that are duplicate within the specified root folder's tree itself:\n");
+        for(int i = 0; i < pRootDir->stDupWithin.nCurFiles; ++i)
+        {
+            PFILEINFO pFileInfo = pRootDir->stDupWithin.apFiles[i];
+            wprintf(L"%10u %c %1d %s\n", 
+                pFileInfo->llFilesize.LowPart,
+                pFileInfo->fIsDirectory ? L'D' : L'F',
+                IsDuplicateFile(pFileInfo) ? 1 : 0,
+                pFileInfo->szFilename);
+        }
     }
-
-    // Insert root as the first in queue
-    pqDirs->Insert(pqDirs, pRootDir, sizeof *pRootDir);
-    
-    PDIRINFO pCurDir = NULL;
-    while(SUCCEEDED(pqDirs->Delete(pqDirs, (PVOID*)&pCurDir)))
-    {
-        // Add all dirs in pCurDir to the queue
-        //PDIRINFO pSubDir;
-        //int index = 0;
-        //while(fChlDsPeekAtLL(pCurDir->pllDirs, index, (PVOID*)&pSubDir))
-        //{
-        //    pqDirs->Insert(pqDirs, pSubDir, sizeof *pSubDir);
-        //    ++index;
-        //}
-
-        // Now, print files in pCurDir
-        PrintFilesInDir(pCurDir);
-        wprintf(L"\n");
-    }
-
-    //NT_ASSERT(pqDirs->nCurItems == 0);
 
     return;
 }
@@ -677,5 +618,19 @@ static BOOL AddToDupWithinList(_In_ DIRINFO::_dupWithin* pDupWithin, _In_ PFILEI
     }
 
     // TODO: Realloc if size is insufficient
+    return FALSE;
+}
+
+static BOOL FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ DIRINFO::_dupWithin* pDupWithinToSearch, _Out_ PFILEINFO *ppFoundFile)
+{
+    for(int i = 0; i < pDupWithinToSearch->nCurFiles; ++i)
+    {
+        PFILEINFO pFile = pDupWithinToSearch->apFiles[i];
+        if(_wcsnicmp(pszFilename, pFile->szFilename, MAX_PATH) == 0)
+        {
+            *ppFoundFile = pFile;
+            return TRUE;
+        }
+    }
     return FALSE;
 }

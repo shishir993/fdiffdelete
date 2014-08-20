@@ -36,18 +36,20 @@ typedef struct _FDiffUiInfo
 
     HWND hLvLeft;
     HWND hLvRight;
+    HWND hStaticLeft;
+    HWND hStaticRight;
 
 }FDIFFUI_INFO;
 
 
 // File local variables
-static WCHAR* aszColumnNames[] = { L"Name", L"DType", L"MDate", L"Size" };
-static int aiColumnWidthPercent[] = { 50, 10, 25, 15 };
-int (CALLBACK *pafnLvCompare[4])(LPARAM, LPARAM, LPARAM) = { lvCmpName, lvCmpDupType, lvCmpDate, lvCmpSize };
+static WCHAR* aszColumnNames[] = { L"Name", L"DType", L"Folder", L"MDate", L"Size" };
+static int aiColumnWidthPercent[] = { 40, 10, 10, 25, 15 };
+int (CALLBACK *pafnLvCompare[])(LPARAM, LPARAM, LPARAM) = { lvCmpName, lvCmpDupType, lvCmpPath, lvCmpDate, lvCmpSize };
 
 // File local function prototypes
-static BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo);
-static BOOL UpdateDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ PDIRINFO* ppDirInfo);
+static BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive);
+static BOOL UpdateDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ PDIRINFO* ppDirInfo, _In_ BOOL fRecursive);
 
 
 // Function definitions
@@ -65,6 +67,8 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
             // Initialize the both the list views by adding the columns
             uiInfo.hLvLeft = GetDlgItem(hDlg, IDC_LIST_LEFT);
             uiInfo.hLvRight = GetDlgItem(hDlg, IDC_LIST_RIGHT);
+            uiInfo.hStaticLeft = GetDlgItem(hDlg, IDC_STATIC_LEFT);
+            uiInfo.hStaticRight = GetDlgItem(hDlg, IDC_STATIC_RIGHT);
 
             fChlGuiInitListViewColumns(uiInfo.hLvLeft, aszColumnNames, ARRAYSIZE(aszColumnNames), aiColumnWidthPercent);
             fChlGuiInitListViewColumns(uiInfo.hLvRight, aszColumnNames, ARRAYSIZE(aszColumnNames), aiColumnWidthPercent);
@@ -148,8 +152,9 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 
                         // Update the list views
                         // TODO: This function destroys dir info and rebuilds it. Not necessary.
+                        BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
                         uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
-                        UpdateFileListViews(&uiInfo);
+                        UpdateFileListViews(&uiInfo, fRecursive);
                     }
                     return TRUE;
                 }
@@ -166,8 +171,9 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 
                         // Update the list views
                         // TODO: This function destroys dir info and rebuilds it. Not necessary.
+                        BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
                         uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
-                        UpdateFileListViews(&uiInfo);
+                        UpdateFileListViews(&uiInfo, fRecursive);
                     }
                     return TRUE;
                 }
@@ -176,9 +182,10 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                     if(uiInfo.pLeftDirInfo != NULL)
                     {
                         // NULL check for the second parameter is in the callee
+                        BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
                         DeleteDupFilesInDir(uiInfo.pLeftDirInfo, uiInfo.pRightDirInfo);
                         uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
-                        UpdateFileListViews(&uiInfo);
+                        UpdateFileListViews(&uiInfo, fRecursive);
                     }
                     return TRUE;
 
@@ -186,9 +193,10 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                     if(uiInfo.pRightDirInfo != NULL)
                     {
                         // NULL check for the second parameter is in the callee
+                        BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
                         DeleteDupFilesInDir(uiInfo.pRightDirInfo, uiInfo.pLeftDirInfo);
                         uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
-                        UpdateFileListViews(&uiInfo);
+                        UpdateFileListViews(&uiInfo, fRecursive);
                     }
                     return TRUE;
 			}
@@ -228,11 +236,12 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 
             if(fRetVal)
             {
-                BuildDirTree(uiInfo.szFolderpathLeft, &uiInfo.pLeftDirInfo);
-                PrintDirTree(uiInfo.pLeftDirInfo);
+                //BuildDirTree(uiInfo.szFolderpathLeft, &uiInfo.pLeftDirInfo);
+                //PrintDirTree(uiInfo.pLeftDirInfo);
 
-                //uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
-                //UpdateFileListViews(&uiInfo);
+                BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
+                uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
+                UpdateFileListViews(&uiInfo, fRecursive);
             }
             return TRUE;
         }
@@ -248,8 +257,9 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 
             if(fRetVal)
             {
+                BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
                 uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
-                UpdateFileListViews(&uiInfo);
+                UpdateFileListViews(&uiInfo, fRecursive);
             }
             return TRUE;
         }
@@ -258,7 +268,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 	return FALSE;
 }
 
-BOOL UpdateDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ PDIRINFO* ppDirInfo)
+BOOL UpdateDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ PDIRINFO* ppDirInfo, _In_ BOOL fRecursive)
 {
     //NT_ASSERT(ppDirInfo);
 
@@ -268,10 +278,10 @@ BOOL UpdateDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ PDIRINFO* ppDirInfo)
         *ppDirInfo = NULL;
     }
 
-    return BuildDirInfo(pszFolderpath, FALSE, ppDirInfo);
+    return BuildDirInfo(pszFolderpath, fRecursive, ppDirInfo);
 }
 
-BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo)
+BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive)
 {
     //NT_ASSERT(pUiInfo);
 
@@ -280,7 +290,7 @@ BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo)
     if(pUiInfo->iFSpecState_Left == FSPEC_STATE_TOUPDATE)
     {
         // NT_ASSERT(pUiInfo->szFolderpathLeft);
-        if(!UpdateDirInfo(pUiInfo->szFolderpathLeft, &pUiInfo->pLeftDirInfo))
+        if(!UpdateDirInfo(pUiInfo->szFolderpathLeft, &pUiInfo->pLeftDirInfo, fRecursive))
         {
             goto error_return;
         }
@@ -295,18 +305,27 @@ BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo)
                 goto error_return;
             }
 
-            PopulateFileList(pUiInfo->hLvRight, pUiInfo->pRightDirInfo);
+            if(PopulateFileList(pUiInfo->hLvRight, pUiInfo->pRightDirInfo))
+            {
+                WCHAR szStats[32];
+                swprintf_s(szStats, ARRAYSIZE(szStats), L"%d folders, %d files.", pUiInfo->pRightDirInfo->nDirs, pUiInfo->pRightDirInfo->nFiles);
+                SetWindowText(pUiInfo->hStaticRight, szStats);
+            }
         }
 
         if(PopulateFileList(pUiInfo->hLvLeft, pUiInfo->pLeftDirInfo))
         {
             pUiInfo->iFSpecState_Left = FSPEC_STATE_FILLED;
+
+            WCHAR szStats[32];
+            swprintf_s(szStats, ARRAYSIZE(szStats), L"%d folders, %d files.", pUiInfo->pLeftDirInfo->nDirs, pUiInfo->pLeftDirInfo->nFiles);
+            SetWindowText(pUiInfo->hStaticLeft, szStats);
         }
     }
     else if(pUiInfo->iFSpecState_Right == FSPEC_STATE_TOUPDATE)
     {
         // NT_ASSERT(pUiInfo->szFolderpathRight);
-        if(!UpdateDirInfo(pUiInfo->szFolderpathRight, &pUiInfo->pRightDirInfo))
+        if(!UpdateDirInfo(pUiInfo->szFolderpathRight, &pUiInfo->pRightDirInfo, fRecursive))
         {
             goto error_return;
         }
@@ -321,12 +340,21 @@ BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo)
                 goto error_return;
             }
 
-            PopulateFileList(pUiInfo->hLvLeft, pUiInfo->pLeftDirInfo);
+            if(PopulateFileList(pUiInfo->hLvLeft, pUiInfo->pLeftDirInfo))
+            {
+                WCHAR szStats[32];
+                swprintf_s(szStats, ARRAYSIZE(szStats), L"%d folders, %d files.", pUiInfo->pLeftDirInfo->nDirs, pUiInfo->pLeftDirInfo->nFiles);
+                SetWindowText(pUiInfo->hStaticLeft, szStats);
+            }
         }
 
         if(PopulateFileList(pUiInfo->hLvRight, pUiInfo->pRightDirInfo))
         {
             pUiInfo->iFSpecState_Right = FSPEC_STATE_FILLED;
+
+            WCHAR szStats[32];
+            swprintf_s(szStats, ARRAYSIZE(szStats), L"%d folders, %d files.", pUiInfo->pRightDirInfo->nDirs, pUiInfo->pRightDirInfo->nFiles);
+            SetWindowText(pUiInfo->hStaticRight, szStats);
         }
     }
     

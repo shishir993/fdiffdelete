@@ -23,5 +23,6 @@ BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo);
 
 int CALLBACK lvCmpName(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 int CALLBACK lvCmpDupType(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
+int CALLBACK lvCmpPath(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 int CALLBACK lvCmpDate(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 int CALLBACK lvCmpSize(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);

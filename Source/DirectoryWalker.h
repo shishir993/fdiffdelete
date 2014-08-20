@@ -17,9 +17,6 @@ typedef struct _DirectoryInfo
     WCHAR pszPath[MAX_PATH];
     int nDirs;
     int nFiles;
-    
-    // Linked list of all dirs.
-    //PCHL_LLIST pllDirs;
 
     // Use a hashtable to store file list.
     // Key is the filename, value is a FILEINFO structure
@@ -31,10 +28,6 @@ typedef struct _DirectoryInfo
         int nCurSize;
         PFILEINFO *apFiles;
     }stDupWithin;
-
-    // Pointer to the parent DIRINFO object, so that tree
-    // traversal is possible.
-    struct _DirectoryInfo* pParentDirInfo;
 
 }DIRINFO, *PDIRINFO;
 
