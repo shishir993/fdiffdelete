@@ -94,6 +94,7 @@ BOOL GetTextFromEditControl(_In_ HWND hEditControl, _Inout_z_ WCHAR* pszFolderpa
 
     if(nChars >= nMaxElements)
     {
+        MessageBox(NULL, L"Path too long.", L"Error", MB_OK | MB_ICONEXCLAMATION);
         return FALSE;
     }
 
@@ -155,7 +156,7 @@ BOOL BuildDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIRI
     if(!PathFileExists(pszFolderpath))
     {
         logerr(L"Folder not found: %s", pszFolderpath);
-        goto error_return;
+        return FALSE;
     }
     
     PDIRINFO pDir = NULL;
@@ -224,19 +225,6 @@ BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo)
         }
     }
 
-    // Now, add the dup name
-    for(int i = 0; i < pDirInfo->stDupWithin.nCurFiles; ++i)
-    {
-        PFILEINFO pFile = pDirInfo->stDupWithin.apFiles[i];
-        ConstructListViewRow(pFile, apszListRow);
-        if(!fChlGuiAddListViewRow(hList, apszListRow, ARRAYSIZE(apszListRow), (LPARAM)pFileInfo))
-        {
-            logerr(L"Error inserting dup within into file list");
-            fRetVal = FALSE;
-            break;
-        }
-    }
-
     // Clear list view if there was an error.
     if(!fRetVal)
     {
@@ -261,7 +249,7 @@ static void ConstructListViewRow(_In_ PFILEINFO pFileInfo, _In_ PWSTR *apsz)
     PWCHAR pszSizeMarker;
     if(pFileInfo->fIsDirectory)
     {
-        apsz[4] = 0;
+        *(apsz[4]) = 0;
     }
     else
     {

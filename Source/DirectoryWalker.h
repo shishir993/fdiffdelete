@@ -22,13 +22,6 @@ typedef struct _DirectoryInfo
     // Key is the filename, value is a FILEINFO structure
     CHL_HTABLE *phtFiles;
 
-    struct _dupWithin
-    {
-        int nCurFiles;
-        int nCurSize;
-        PFILEINFO *apFiles;
-    }stDupWithin;
-
 }DIRINFO, *PDIRINFO;
 
 

@@ -14,6 +14,8 @@
 
 #define WM_UPDATE_LEFT      (WM_USER + 1)   // wParam = TRUE/FALSE path stored in FDIFFUI_INFO.szFolderpath* or not, LPARAM = not used.
 #define WM_UPDATE_RIGHT     (WM_USER + 2)   // same as above
+#define WM_BROWSE_LEFT      (WM_USER + 3)
+#define WM_BROWSE_RIGHT     (WM_USER + 4)
 
 #define FSPEC_STATE_EMPTY           0
 #define FSPEC_STATE_FILLED          1
@@ -125,9 +127,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                     {
                         // Populate the edit control with this path
                         SendMessage(GetDlgItem(hDlg, IDC_EDIT_LEFT), WM_SETTEXT, 0, (LPARAM)uiInfo.szFolderpathLeft);
-                        SendMessage(hDlg, WM_UPDATE_LEFT, TRUE, (LPARAM)NULL);
                     }
-
                     return TRUE;
 
                 case IDC_BTN_BRWS_RIGHT:
@@ -135,10 +135,41 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                     {
                         // Populate the edit control with this path
                         SendMessage(GetDlgItem(hDlg, IDC_EDIT_RIGHT), WM_SETTEXT, 0, (LPARAM)uiInfo.szFolderpathRight);
-                        SendMessage(hDlg, WM_UPDATE_RIGHT, TRUE, (LPARAM)NULL);
                     }
-
                     return TRUE;
+
+                case IDC_BTN_LOAD_LEFT:
+                    if(GetTextFromEditControl(GetDlgItem(hDlg, IDC_EDIT_LEFT), 
+                        uiInfo.szFolderpathLeft, ARRAYSIZE(uiInfo.szFolderpathLeft)))
+                    {
+                        if(uiInfo.szFolderpathLeft[0] != 0)
+                        {
+                            SendMessage(hDlg, WM_UPDATE_LEFT, FALSE, (LPARAM)NULL);
+                        }
+                        else if(SUCCEEDED(GetFolderToOpen(uiInfo.szFolderpathLeft)))
+                        {
+                            // Populate the edit control with this path and send message to update list view
+                            SendMessage(GetDlgItem(hDlg, IDC_EDIT_LEFT), WM_SETTEXT, 0, (LPARAM)uiInfo.szFolderpathLeft);
+                            SendMessage(hDlg, WM_UPDATE_LEFT, TRUE, (LPARAM)NULL);
+                        }
+                    }
+                    return TRUE;
+
+                case IDC_BTN_LOAD_RIGHT:
+                    if(GetTextFromEditControl(GetDlgItem(hDlg, IDC_EDIT_RIGHT), 
+                        uiInfo.szFolderpathRight, ARRAYSIZE(uiInfo.szFolderpathRight)))
+                    {
+                        if(uiInfo.szFolderpathRight[0] != 0)
+                        {
+                            SendMessage(hDlg, WM_UPDATE_RIGHT, FALSE, (LPARAM)NULL);
+                        }
+                        else if(SUCCEEDED(GetFolderToOpen(uiInfo.szFolderpathRight)))
+                        {
+                            // Populate the edit control with this path and send message to update list view
+                            SendMessage(GetDlgItem(hDlg, IDC_EDIT_RIGHT), WM_SETTEXT, 0, (LPARAM)uiInfo.szFolderpathRight);
+                            SendMessage(hDlg, WM_UPDATE_RIGHT, TRUE, (LPARAM)NULL);
+                        }
+                    }
 
                 case IDC_BTN_DEL_LEFT:
                 {
@@ -181,10 +212,17 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                 case IDC_BTN_DELALL_LEFT:
                     if(uiInfo.pLeftDirInfo != NULL)
                     {
-                        // NULL check for the second parameter is in the callee
                         BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
+
+                        // NULL check for the second parameter is in the callee
                         DeleteDupFilesInDir(uiInfo.pLeftDirInfo, uiInfo.pRightDirInfo);
-                        uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
+                        uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
+
+                        // Update right if it is already filled
+                        if(uiInfo.iFSpecState_Right == FSPEC_STATE_FILLED)
+                        {
+                            uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
+                        }
                         UpdateFileListViews(&uiInfo, fRecursive);
                     }
                     return TRUE;
@@ -192,10 +230,17 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                 case IDC_BTN_DELALL_RIGHT:
                     if(uiInfo.pRightDirInfo != NULL)
                     {
-                        // NULL check for the second parameter is in the callee
                         BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
+
+                        // NULL check for the second parameter is in the callee
                         DeleteDupFilesInDir(uiInfo.pRightDirInfo, uiInfo.pLeftDirInfo);
-                        uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
+                        uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
+
+                        // Update left if it is already filled
+                        if(uiInfo.iFSpecState_Left == FSPEC_STATE_FILLED)
+                        {
+                            uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
+                        }
                         UpdateFileListViews(&uiInfo, fRecursive);
                     }
                     return TRUE;
@@ -236,9 +281,6 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 
             if(fRetVal)
             {
-                //BuildDirTree(uiInfo.szFolderpathLeft, &uiInfo.pLeftDirInfo);
-                //PrintDirTree(uiInfo.pLeftDirInfo);
-
                 BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
                 uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
                 UpdateFileListViews(&uiInfo, fRecursive);

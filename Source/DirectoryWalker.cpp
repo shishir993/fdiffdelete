@@ -27,8 +27,7 @@ static WCHAR *g_apszBannedFilesFolders[] =
 
 static void _ConvertToAscii(_In_ PCWSTR pwsz, _Out_ char* psz);
 static BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars);
-static BOOL AddToDupWithinList(_In_ DIRINFO::_dupWithin* pDupWithin, _In_ PFILEINFO pFileInfo);
-static BOOL FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ DIRINFO::_dupWithin* pDupWithinToSearch, _Out_ PFILEINFO *ppFoundFile);
+
 
 static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_opt_ const PDIRINFO pParentDir, _Out_ PDIRINFO* ppDirInfo)
 {
@@ -42,20 +41,10 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_opt_ const PDIRINFO pParentD
 
     ZeroMemory(pDirInfo, sizeof(*pDirInfo));
     wcscpy_s(pDirInfo->pszPath, ARRAYSIZE(pDirInfo->pszPath), pszFolderpath);
-
     if(!fChlDsCreateHT(&pDirInfo->phtFiles, 256, HT_KEY_STR, HT_VAL_PTR, TRUE))
     {
         logerr(L"Couldn't create hash table for dir: %s", pszFolderpath);
         hr = E_FAIL;
-        goto error_return;
-    }
-
-    // Allocate an array of pointer for the dup within files
-    pDirInfo->stDupWithin.nCurSize = INIT_DUP_WITHIN_SIZE;
-    pDirInfo->stDupWithin.apFiles = (PFILEINFO*)malloc(sizeof(PFILEINFO) * INIT_DUP_WITHIN_SIZE);
-    if(pDirInfo->stDupWithin.apFiles == NULL)
-    {
-        hr = E_OUTOFMEMORY;
         goto error_return;
     }
 
@@ -71,11 +60,6 @@ error_return:
             fChlDsDestroyHT(pDirInfo->phtFiles);
         }
 
-        if(pDirInfo->stDupWithin.apFiles != NULL)
-        {
-            free(pDirInfo->stDupWithin.apFiles);
-        }
-
         free(pDirInfo);
     }
     return hr;
@@ -88,11 +72,6 @@ void DestroyDirInfo(_In_ PDIRINFO pDirInfo)
     if(pDirInfo->phtFiles != NULL)
     {
         fChlDsDestroyHT(pDirInfo->phtFiles);
-    }
-
-    if(pDirInfo->stDupWithin.apFiles != NULL)
-    {
-        free(pDirInfo->stDupWithin.apFiles);
     }
 
     free(pDirInfo);
@@ -237,20 +216,11 @@ BOOL BuildFilesInDir(_In_ PCWSTR pszFolderpath, _In_opt_ PCHL_QUEUE pqDirsToTrav
             _ConvertToAscii(findData.cFileName, szKey);
             int nSize = strnlen_s(szKey, MAX_PATH) + 1;
 
-            // If the current file's name is already inserted, then add it to the
-            // dup within list
-            if(fChlDsFindHT(pCurDirInfo->phtFiles, szKey, nSize, NULL, NULL))
+            if(!fChlDsInsertHT(pCurDirInfo->phtFiles, szKey, nSize, pFileInfo, sizeof(pFileInfo)))
             {
-                AddToDupWithinList(&pCurDirInfo->stDupWithin, pFileInfo);
-            }
-            else
-            {
-                if(!fChlDsInsertHT(pCurDirInfo->phtFiles, szKey, nSize, pFileInfo, sizeof(pFileInfo)))
-                {
-                    logerr(L"Cannot add to file list: %s", szSearchpath);
-                    free(pFileInfo);
-                    goto error_return;
-                }
+                logerr(L"Cannot add to file list: %s", szSearchpath);
+                free(pFileInfo);
+                goto error_return;
             }
 
             ++(pCurDirInfo->nFiles);
@@ -307,31 +277,17 @@ BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
 
     char* pszLeftFile;
     PFILEINFO pLeftFile, pRightFile;
-    int nLeftKeySize, nLeftValSize, nRightValSize;
+    int nLeftKeySize;
 
     logdbg(L"Comparing dirs: %s and %s", pLeftDir->pszPath, pRightDir->pszPath);
-    while(fChlDsGetNextHT(pLeftDir->phtFiles, &itrLeft, &pszLeftFile, &nLeftKeySize, &pLeftFile, &nLeftValSize))
+    while(fChlDsGetNextHT(pLeftDir->phtFiles, &itrLeft, &pszLeftFile, &nLeftKeySize, &pLeftFile, NULL))
     {
-        if(fChlDsFindHT(pRightDir->phtFiles, (void*)pszLeftFile, nLeftKeySize, &pRightFile, &nRightValSize))
+        if(fChlDsFindHT(pRightDir->phtFiles, (void*)pszLeftFile, nLeftKeySize, &pRightFile, NULL))
         {
             // Same file found in right dir, compare and mark as duplicate
             if(CompareFileInfoAndMark(pLeftFile, pRightFile))
             {
                 logdbg(L"Duplicate file: %S", pszLeftFile);
-            }
-        }
-    }
-
-    // See if dup within files are duplicate
-    for(int i = 0; i < pLeftDir->stDupWithin.nCurFiles; ++i)
-    {
-        pLeftFile = pLeftDir->stDupWithin.apFiles[i];
-        if(FindInDupWithinList(pLeftFile->szFilename, &pRightDir->stDupWithin, &pRightFile))
-        {
-            // Same file found in right dir, compare and mark as duplicate
-            if(CompareFileInfoAndMark(pLeftFile, pRightFile))
-            {
-                logdbg(L"DupWithin Duplicate file: %S", pszLeftFile);
             }
         }
     }
@@ -421,11 +377,10 @@ BOOL DeleteDupFilesInDir(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdat
         goto error_return;
     }
 
-    int nKeySize, nValSize;
     char* pszFilename = NULL;
     PFILEINFO pFileInfo = NULL;
     PFILEINFO pPrevDupFileInfo = NULL;
-    while(fChlDsGetNextHT(pDirDeleteFrom->phtFiles, &itr, &pszFilename, &nKeySize, &pFileInfo, &nValSize))
+    while(fChlDsGetNextHT(pDirDeleteFrom->phtFiles, &itr, &pszFilename, NULL, &pFileInfo, NULL))
     {
         //NT_ASSERT(nKeySize == sizeof(PWCHAR));
         //NT_ASSERT(nValSize == sizeof(PFILEINFO));
@@ -445,29 +400,28 @@ BOOL DeleteDupFilesInDir(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdat
 
                 _ConvertToAscii(pPrevDupFileInfo->szFilename, szKey);
                 BOOL fFound = fChlDsFindHT(pDirToUpdate->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1,
-                                &pFileToUpdate, &nValSize);
+                                &pFileToUpdate, NULL);
                 //NT_ASSERT(fFound);    // Must find in the other dir also.
                 ClearDuplicateAttr(pFileToUpdate);
             }
 
-            // Now, delete file from the specified dir
+            // Now, delete file from the specified dir and from hash table
             _DeleteFile(pDirDeleteFrom, pPrevDupFileInfo);
+            pPrevDupFileInfo = NULL;
         }
 
         if(IsDuplicateFile(pFileInfo))
         {
             pPrevDupFileInfo = pFileInfo;
         }
-        else
-        {
-            pPrevDupFileInfo = NULL;
-        }
     }
 
     if(pPrevDupFileInfo)
     {
         _DeleteFile(pDirDeleteFrom, pPrevDupFileInfo);
+        pPrevDupFileInfo = NULL;
     }
+
     return TRUE;
 
 error_return:
@@ -501,14 +455,14 @@ BOOL DeleteFilesInDir(
     {
         _ConvertToAscii(paszFileNamesToDelete + (index * MAX_PATH), szKey);
         nKeySize = strnlen_s(szKey, ARRAYSIZE(szKey)) + 1;
-        if(fChlDsFindHT(pDirDeleteFrom->phtFiles, szKey, nKeySize, &pFileToDelete, &nValSize))
+        if(fChlDsFindHT(pDirDeleteFrom->phtFiles, szKey, nKeySize, &pFileToDelete, NULL))
         {
             // File found in from-dir
             // If file is present in to-update-dir, then clear it's duplicate flag
             // TODO: Better logic; don't check this inside the loop, every iteration
             if(pDirToUpdate)
             {
-                if(fChlDsFindHT(pDirToUpdate->phtFiles, szKey, nKeySize, &pFileToUpdate, &nValSize))
+                if(fChlDsFindHT(pDirToUpdate->phtFiles, szKey, nKeySize, &pFileToUpdate, NULL))
                 {
                     // Don't care what kind of duplicacy it was, now there will be no duplicate.
                     ClearDuplicateAttr(pFileToUpdate);
@@ -517,6 +471,7 @@ BOOL DeleteFilesInDir(
 
             // Delete file from file system and remove from hashtable
             _DeleteFile(pDirDeleteFrom, pFileToDelete);
+            free(pFileToDelete);
         }
         else
         {
@@ -530,31 +485,6 @@ BOOL DeleteFilesInDir(
 }
 
 #pragma endregion FileOperations
-
-// Print the dir tree in BFS order, two blank lines separating 
-// file listing of each directory
-void PrintDirTree(_In_ PDIRINFO pRootDir)
-{
-    PrintFilesInDir(pRootDir);
-    wprintf(L"\n");
-
-    // Print any dup within files
-    if(pRootDir->stDupWithin.nCurFiles > 0)
-    {
-        wprintf(L"These are the files that are duplicate within the specified root folder's tree itself:\n");
-        for(int i = 0; i < pRootDir->stDupWithin.nCurFiles; ++i)
-        {
-            PFILEINFO pFileInfo = pRootDir->stDupWithin.apFiles[i];
-            wprintf(L"%10u %c %1d %s\n", 
-                pFileInfo->llFilesize.LowPart,
-                pFileInfo->fIsDirectory ? L'D' : L'F',
-                IsDuplicateFile(pFileInfo) ? 1 : 0,
-                pFileInfo->szFilename);
-        }
-    }
-
-    return;
-}
 
 // Print files in the folder, one on each line. End on a blank line.
 void PrintFilesInDir(_In_ PDIRINFO pDirInfo)
@@ -570,10 +500,9 @@ void PrintFilesInDir(_In_ PDIRINFO pDirInfo)
 
     wprintf(L"%s\n", pDirInfo->pszPath);
 
-    int nKeySize, nValSize;
     char* pszFilename = NULL;
     PFILEINFO pFileInfo = NULL;
-    while(fChlDsGetNextHT(pDirInfo->phtFiles, &itr, &pszFilename, &nKeySize, &pFileInfo, &nValSize))
+    while(fChlDsGetNextHT(pDirInfo->phtFiles, &itr, &pszFilename, NULL, &pFileInfo, NULL))
     {
         //NT_ASSERT(nKeySize == sizeof(PWCHAR));
         //NT_ASSERT(nValSize == sizeof(PFILEINFO));
@@ -602,33 +531,6 @@ static BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars)
     {
         if(_wcsnicmp(pszFilename, g_apszBannedFilesFolders[i], nMaxChars) == 0)
         {
-            return TRUE;
-        }
-    }
-    return FALSE;
-}
-
-static BOOL AddToDupWithinList(_In_ DIRINFO::_dupWithin* pDupWithin, _In_ PFILEINFO pFileInfo)
-{
-    if(pDupWithin->nCurFiles < pDupWithin->nCurSize)
-    {
-        pDupWithin->apFiles[pDupWithin->nCurFiles] = pFileInfo;
-        ++(pDupWithin->nCurFiles);
-        return TRUE;
-    }
-
-    // TODO: Realloc if size is insufficient
-    return FALSE;
-}
-
-static BOOL FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ DIRINFO::_dupWithin* pDupWithinToSearch, _Out_ PFILEINFO *ppFoundFile)
-{
-    for(int i = 0; i < pDupWithinToSearch->nCurFiles; ++i)
-    {
-        PFILEINFO pFile = pDupWithinToSearch->apFiles[i];
-        if(_wcsnicmp(pszFilename, pFile->szFilename, MAX_PATH) == 0)
-        {
-            *ppFoundFile = pFile;
             return TRUE;
         }
     }
