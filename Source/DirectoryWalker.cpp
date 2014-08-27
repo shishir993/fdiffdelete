@@ -29,6 +29,7 @@ static void _ConvertToAscii(_In_ PCWSTR pwsz, _Out_ char* psz);
 static BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars);
 static BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO pFileInfo);
 static int FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _In_ int iStartIndex);
+static BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES_WITHIN pDupWithinToSearch);
 
 static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_opt_ const PDIRINFO pParentDir, _Out_ PDIRINFO* ppDirInfo)
 {
@@ -79,6 +80,17 @@ void DestroyDirInfo(_In_ PDIRINFO pDirInfo)
         fChlDsDestroyHT(pDirInfo->phtFiles);
     }
 
+    // Free each FILEINFO stored in the dup within list
+    for(int i = 0; i < pDirInfo->stDupFilesInTree.nCurFiles; ++i)
+    {
+        PFILEINFO pFile = pDirInfo->stDupFilesInTree.apFiles[i];
+        if(pFile != NULL)
+        {
+            free(pFile);
+        }
+    }
+
+    // Finally, free the list of FILEINFO pointers itself
     if(pDirInfo->stDupFilesInTree.apFiles != NULL)
     {
         free(pDirInfo->stDupFilesInTree.apFiles);
@@ -179,7 +191,6 @@ BOOL BuildFilesInDir(_In_ PCWSTR pszFolderpath, _In_opt_ PCHL_QUEUE pqDirsToTrav
         // Skip banned files and folders
         if(IsFileFolderBanned(findData.cFileName, ARRAYSIZE(findData.cFileName)))
         {
-            logdbg(L"Banned: %s", findData.cFileName);
             continue;
         }
 
@@ -308,12 +319,39 @@ BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
                 logdbg(L"Duplicate file: %S", pszLeftFile);
             }
         }
+
+        int index = -1;
+        while((index = FindInDupWithinList(pLeftFile->szFilename, &pRightDir->stDupFilesInTree, index + 1)) != -1)
+        {
+            // Same file found in right dir, compare and mark as duplicate
+            pRightFile = pRightDir->stDupFilesInTree.apFiles[index];
+            if(CompareFileInfoAndMark(pLeftFile, pRightFile))
+            {
+                logdbg(L"DupWithin Duplicate file: %S", pszLeftFile);
+            }
+        }
     }
 
     // See if dup within files are duplicate
     for(int i = 0; i < pLeftDir->stDupFilesInTree.nCurFiles; ++i)
     {
+        // Check if this file is in the right dir by checking both its hashtable and the dupwithin list
         pLeftFile = pLeftDir->stDupFilesInTree.apFiles[i];
+
+        // Hashtable first
+        char szKey[MAX_PATH];
+        _ConvertToAscii(pLeftFile->szFilename, szKey);
+        nLeftKeySize = strnlen_s(szKey, MAX_PATH) + 1;
+        if(fChlDsFindHT(pRightDir->phtFiles, (void*)szKey, nLeftKeySize, &pRightFile, NULL))
+        {
+            // Same file found in right dir, compare and mark as duplicate
+            if(CompareFileInfoAndMark(pLeftFile, pRightFile))
+            {
+                logdbg(L"Duplicate file: %S", pszLeftFile);
+            }
+        }
+
+        // Now, the dup-within
         int index = -1;
         while((index = FindInDupWithinList(pLeftFile->szFilename, &pRightDir->stDupFilesInTree, index + 1)) != -1)
         {
@@ -337,33 +375,39 @@ error_return:
 static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
 {
     BOOL fRetVal = TRUE;
+
+    // Remove from file list
+    // The hashtable supports only char* keys
     char szKey[MAX_PATH];
+    _ConvertToAscii(pFileInfo->szFilename, szKey);
+    if(!fChlDsRemoveHT(pDirInfo->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1))
+    {
+        // See if file is present in the dup within list
+        if(!(RemoveFromDupWithinList(pFileInfo, &pDirInfo->stDupFilesInTree)))
+        {
+            logerr(L"Failed to remove file from hashtable/list: %s", pFileInfo->szFilename);
+            fRetVal = FALSE;
+            goto done;
+        }
+    }
+    --(pDirInfo->nFiles);
 
-    WCHAR pszFilepath[MAX_PATH] = L"";
-    wcscpy_s(pszFilepath, ARRAYSIZE(pszFilepath), pFileInfo->szPath);
+    WCHAR pszFilepath[MAX_PATH];
+    loginfo(L"Deleting file = %s", pszFilepath);
+    if(PathCombine(pszFilepath, pFileInfo->szPath, pFileInfo->szFilename) == NULL)
+    {
+        logerr(L"PathCombine() failed for %s + %s", pFileInfo->szPath, pFileInfo->szFilename);
+        fRetVal = FALSE;
+        goto done;
+    }
 
-    loginfo(L"Deleting file = %s", pFileInfo->szFilename);
-    wcscat_s(pszFilepath, ARRAYSIZE(pszFilepath), L"\\");
-    wcscat_s(pszFilepath, ARRAYSIZE(pszFilepath), pFileInfo->szFilename);
     if(!DeleteFile(pszFilepath))
     {
         logerr(L"DeleteFile() failed.");
         fRetVal = FALSE;
     }
-    else
-    {   
-        // Remove from file list
-        // The hashtable supports only char* keys
-        _ConvertToAscii(pFileInfo->szFilename, szKey);
-        if(!fChlDsRemoveHT(pDirInfo->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1))
-        {
-            logwarn(L"Failed to remove file from list: %s", pFileInfo->szFilename);
-            fRetVal = FALSE;
-        }
 
-        --(pDirInfo->nFiles);
-    }
-
+done:
     return fRetVal;
 }
 
@@ -430,7 +474,6 @@ BOOL DeleteDupFilesInDir(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdat
                 // to say that it is not a duplicate any more.
                 char szKey[MAX_PATH];
                 PFILEINFO pFileToUpdate;
-                int nValSize;
 
                 _ConvertToAscii(pPrevDupFileInfo->szFilename, szKey);
                 BOOL fFound = fChlDsFindHT(pDirToUpdate->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1,
@@ -439,7 +482,7 @@ BOOL DeleteDupFilesInDir(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdat
                 ClearDuplicateAttr(pFileToUpdate);
             }
 
-            // Now, delete file from the specified dir and from hash table
+            // Now, delete file from the specified dir and from file lists
             _DeleteFile(pDirDeleteFrom, pPrevDupFileInfo);
             pPrevDupFileInfo = NULL;
         }
@@ -505,7 +548,6 @@ BOOL DeleteFilesInDir(
 
             // Delete file from file system and remove from hashtable
             _DeleteFile(pDirDeleteFrom, pFileToDelete);
-            free(pFileToDelete);
         }
         else
         {
@@ -596,14 +638,41 @@ static BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars)
 
 static BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO pFileInfo)
 {
-    if(pDupWithin->nCurFiles < pDupWithin->nCurSize)
+    BOOL fContinue = TRUE;
+    if(pDupWithin->nCurFiles >= pDupWithin->nCurSize)
     {
+        // Must resize buffer
+
+        if(fChlGnIsOverflowINT(pDupWithin->nCurSize, pDupWithin->nCurSize))
+        {
+            logerr(L"Reached limit of int arithmetic for nCurSize = %d!", pDupWithin->nCurSize);
+            fContinue = FALSE;
+        }
+        else
+        {
+            int nNewNumFiles = pDupWithin->nCurSize << 1;
+            logdbg(L"Resizing to size %d", nNewNumFiles);
+            PFILEINFO* apnew = (PFILEINFO*)realloc(pDupWithin->apFiles, sizeof(PFILEINFO) * nNewNumFiles);
+            if(apnew != NULL)
+            {
+                pDupWithin->apFiles = apnew;
+                pDupWithin->nCurSize = nNewNumFiles;
+            }
+            else
+            {
+                logerr(L"Out of memory.");
+                fContinue = FALSE;
+            }
+        }
+    }
+
+    if(fContinue)
+    {
+        // Now, insert into list
         pDupWithin->apFiles[pDupWithin->nCurFiles] = pFileInfo;
         ++(pDupWithin->nCurFiles);
-        return TRUE;
     }
-    // TODO: Realloc if size is insufficient
-    return FALSE;
+    return fContinue;
 }
 
 static int FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _In_ int iStartIndex)
@@ -612,10 +681,44 @@ static int FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pD
     for(int i = iStartIndex; i < pDupWithinToSearch->nCurFiles; ++i)
     {
         PFILEINFO pFile = pDupWithinToSearch->apFiles[i];
+        if(pFile == NULL)
+        {
+            continue;
+        }
+
         if(_wcsnicmp(pszFilename, pFile->szFilename, MAX_PATH) == 0)
         {
             return i;
         }
     }
     return -1;
+}
+
+static BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES_WITHIN pDupWithinToSearch)
+{
+    WCHAR pszCompareFromPath[MAX_PATH];
+    if(PathCombine(pszCompareFromPath, pFileToDelete->szPath, pFileToDelete->szFilename) == NULL)
+    {
+        logerr(L"PathCombine() failed for %s + %s", pFileToDelete->szPath, pFileToDelete->szFilename);
+        return FALSE;
+    }
+
+    WCHAR pszCompareToPath[MAX_PATH];
+    for(int i = 0; i < pDupWithinToSearch->nCurFiles; ++i)
+    {
+        PFILEINFO pFile = pDupWithinToSearch->apFiles[i];
+        if(PathCombine(pszCompareToPath, pFile->szPath, pFile->szFilename) == NULL)
+        {
+            logerr(L"PathCombine() failed for %s + %s", pFile->szPath, pFile->szFilename);
+            return FALSE;
+        }
+
+        if(_wcsnicmp(pszCompareFromPath, pszCompareToPath, MAX_PATH) == 0)
+        {
+            free(pFile);
+            pDupWithinToSearch->apFiles[i] = NULL;
+            return TRUE;
+        }
+    }
+    return FALSE;
 }

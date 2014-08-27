@@ -305,7 +305,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
             fRetVal &= CheckShowInvalidDirMBox(hDlg, uiInfo.szFolderpathRight);
             if(fRetVal)
             {
-                BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
+                BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_RIGHT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
                 uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
                 UpdateFileListViews(&uiInfo, fRecursive);
             }

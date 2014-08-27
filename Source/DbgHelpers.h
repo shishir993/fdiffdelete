@@ -13,7 +13,7 @@
  * Modified/additions to my liking
  */
 
-#define TURNOFF_LOGGING
+//#define TURNOFF_LOGGING
 
 #ifndef TURNOFF_LOGGING
 
