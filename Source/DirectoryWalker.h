@@ -12,6 +12,17 @@
 #include "FileInfo.h"
 #include "CHelpLibDll.h"
 
+// Structure to hold the files that have same name within
+// the same directory tree. This is required because the hashtable
+// in DIRINFO uses filename as key, which means there will be name
+// conflicts.
+typedef struct _dupWithin
+{
+    int nCurFiles;
+    int nCurSize;
+    PFILEINFO *apFiles;
+}DUPFILES_WITHIN, *PDUPFILES_WITHIN;
+
 typedef struct _DirectoryInfo
 {
     WCHAR pszPath[MAX_PATH];
@@ -21,6 +32,10 @@ typedef struct _DirectoryInfo
     // Use a hashtable to store file list.
     // Key is the filename, value is a FILEINFO structure
     CHL_HTABLE *phtFiles;
+
+    // List of FILEINFO of files that have the same name in 
+    // the same dir tree.
+    DUPFILES_WITHIN stDupFilesInTree;
 
 }DIRINFO, *PDIRINFO;
 

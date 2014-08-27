@@ -52,7 +52,7 @@ int (CALLBACK *pafnLvCompare[])(LPARAM, LPARAM, LPARAM) = { lvCmpName, lvCmpDupT
 // File local function prototypes
 static BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive);
 static BOOL UpdateDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ PDIRINFO* ppDirInfo, _In_ BOOL fRecursive);
-
+static BOOL CheckShowInvalidDirMBox(_In_ HWND hDlg, _In_ PCWSTR pszFolderpath);
 
 // Function definitions
 
@@ -71,6 +71,10 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
             uiInfo.hLvRight = GetDlgItem(hDlg, IDC_LIST_RIGHT);
             uiInfo.hStaticLeft = GetDlgItem(hDlg, IDC_STATIC_LEFT);
             uiInfo.hStaticRight = GetDlgItem(hDlg, IDC_STATIC_RIGHT);
+
+            // Enable full-row selection instead of only the first column
+            SendMessage(uiInfo.hLvLeft, LVM_SETEXTENDEDLISTVIEWSTYLE, 0, (LPARAM)LVS_EX_FULLROWSELECT);
+            SendMessage(uiInfo.hLvRight, LVM_SETEXTENDEDLISTVIEWSTYLE, 0, (LPARAM)LVS_EX_FULLROWSELECT);
 
             fChlGuiInitListViewColumns(uiInfo.hLvLeft, aszColumnNames, ARRAYSIZE(aszColumnNames), aiColumnWidthPercent);
             fChlGuiInitListViewColumns(uiInfo.hLvRight, aszColumnNames, ARRAYSIZE(aszColumnNames), aiColumnWidthPercent);
@@ -279,6 +283,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                             uiInfo.szFolderpathLeft, ARRAYSIZE(uiInfo.szFolderpathLeft));
             }
 
+            fRetVal &= CheckShowInvalidDirMBox(hDlg, uiInfo.szFolderpathLeft);
             if(fRetVal)
             {
                 BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
@@ -297,6 +302,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                             uiInfo.szFolderpathRight, ARRAYSIZE(uiInfo.szFolderpathRight));
             }
 
+            fRetVal &= CheckShowInvalidDirMBox(hDlg, uiInfo.szFolderpathRight);
             if(fRetVal)
             {
                 BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
@@ -399,10 +405,31 @@ BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive)
             SetWindowText(pUiInfo->hStaticRight, szStats);
         }
     }
-    
 
     return TRUE;
 
 error_return:
     return FALSE;
+}
+
+static BOOL CheckShowInvalidDirMBox(_In_ HWND hDlg, _In_ PCWSTR pszFolderpath)
+{
+    BOOL fValidFolder = TRUE;
+
+    WCHAR szMsg[MAX_PATH << 1];
+    DWORD dwAttr = GetFileAttributes(pszFolderpath);
+    if(dwAttr == INVALID_FILE_ATTRIBUTES)
+    {
+        fValidFolder = FALSE;
+        logerr(L"GetFileAttributes() failed for %s", pszFolderpath);
+        swprintf_s(szMsg, ARRAYSIZE(szMsg), L"Directory \"%s\" does not exist or cannot be accessed.", pszFolderpath);
+        MessageBox(hDlg, szMsg, L"Error", MB_OK | MB_ICONEXCLAMATION);
+    }
+    else if(!(dwAttr & FILE_ATTRIBUTE_DIRECTORY))
+    {
+        fValidFolder = FALSE;
+        swprintf_s(szMsg, ARRAYSIZE(szMsg), L"\"%s\" is not a directory.", pszFolderpath);
+        MessageBox(hDlg, szMsg, L"Error", MB_OK | MB_ICONEXCLAMATION);
+    }
+    return fValidFolder;
 }

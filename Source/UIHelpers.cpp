@@ -212,10 +212,23 @@ BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo)
     PWCHAR apszListRow[] = {NULL, szDupType, NULL, szDateTime, szSize};
 
     // For each file in the dir, convert relevant attributes into 
-    // strings and insert into the list view row by row
+    // strings and insert into the list view row by row.
     BOOL fRetVal = TRUE;
     while(fChlDsGetNextHT(pDirInfo->phtFiles, &itr, &pszKey, &nKeySize, &pFileInfo, &nValSize))
     {
+        ConstructListViewRow(pFileInfo, apszListRow);
+        if(!fChlGuiAddListViewRow(hList, apszListRow, ARRAYSIZE(apszListRow), (LPARAM)pFileInfo))
+        {
+            logerr(L"Error inserting into file list");
+            fRetVal = FALSE;
+            break;
+        }
+    }
+
+    // Insert the name-duplicate files now.
+    for(int i = 0; i < pDirInfo->stDupFilesInTree.nCurFiles; ++i)
+    {
+        pFileInfo = pDirInfo->stDupFilesInTree.apFiles[i];
         ConstructListViewRow(pFileInfo, apszListRow);
         if(!fChlGuiAddListViewRow(hList, apszListRow, ARRAYSIZE(apszListRow), (LPARAM)pFileInfo))
         {

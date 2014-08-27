@@ -27,7 +27,8 @@ static WCHAR *g_apszBannedFilesFolders[] =
 
 static void _ConvertToAscii(_In_ PCWSTR pwsz, _Out_ char* psz);
 static BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars);
-
+static BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO pFileInfo);
+static int FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _In_ int iStartIndex);
 
 static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_opt_ const PDIRINFO pParentDir, _Out_ PDIRINFO* ppDirInfo)
 {
@@ -48,6 +49,15 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_opt_ const PDIRINFO pParentD
         goto error_return;
     }
 
+    // Allocate an array of pointer for the dup within files
+    pDirInfo->stDupFilesInTree.nCurSize = INIT_DUP_WITHIN_SIZE;
+    pDirInfo->stDupFilesInTree.apFiles = (PFILEINFO*)malloc(sizeof(PFILEINFO) * INIT_DUP_WITHIN_SIZE);
+    if(pDirInfo->stDupFilesInTree.apFiles == NULL)
+    {
+        hr = E_OUTOFMEMORY;
+        goto error_return;
+    }
+
     *ppDirInfo = pDirInfo;
     return hr;
 
@@ -55,12 +65,7 @@ error_return:
     *ppDirInfo = NULL;
     if(pDirInfo != NULL)
     {
-        if(pDirInfo->phtFiles != NULL)
-        {
-            fChlDsDestroyHT(pDirInfo->phtFiles);
-        }
-
-        free(pDirInfo);
+        DestroyDirInfo(pDirInfo);
     }
     return hr;
 }
@@ -72,6 +77,11 @@ void DestroyDirInfo(_In_ PDIRINFO pDirInfo)
     if(pDirInfo->phtFiles != NULL)
     {
         fChlDsDestroyHT(pDirInfo->phtFiles);
+    }
+
+    if(pDirInfo->stDupFilesInTree.apFiles != NULL)
+    {
+        free(pDirInfo->stDupFilesInTree.apFiles);
     }
 
     free(pDirInfo);
@@ -104,8 +114,7 @@ BOOL BuildDirTree(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
         loginfo(L"Continuing traversal in dir: %s", pDirToTraverse->pszPath);
         if(!BuildFilesInDir(pDirToTraverse->pszPath, pqDirsToTraverse, &pFirstDir))
         {
-            logerr(L"Could not build files in dir: %s", pszRootpath);
-            goto error_return;
+            logerr(L"Could not build files in dir: %s. Continuing...", pDirToTraverse->pszPath);
         }
     }
 
@@ -215,12 +224,21 @@ BOOL BuildFilesInDir(_In_ PCWSTR pszFolderpath, _In_opt_ PCHL_QUEUE pqDirsToTrav
             char szKey[MAX_PATH];
             _ConvertToAscii(findData.cFileName, szKey);
             int nSize = strnlen_s(szKey, MAX_PATH) + 1;
-
-            if(!fChlDsInsertHT(pCurDirInfo->phtFiles, szKey, nSize, pFileInfo, sizeof(pFileInfo)))
+            // If the current file's name is already inserted, then add it to the
+            // dup within list
+            if(fChlDsFindHT(pCurDirInfo->phtFiles, szKey, nSize, NULL, NULL))
             {
-                logerr(L"Cannot add to file list: %s", szSearchpath);
-                free(pFileInfo);
-                goto error_return;
+                AddToDupWithinList(&pCurDirInfo->stDupFilesInTree, pFileInfo);
+            }
+            else
+            {
+
+                if(!fChlDsInsertHT(pCurDirInfo->phtFiles, szKey, nSize, pFileInfo, sizeof(pFileInfo)))
+                {
+                    logerr(L"Cannot add to file list: %s", szSearchpath);
+                    free(pFileInfo);
+                    goto error_return;
+                }
             }
 
             ++(pCurDirInfo->nFiles);
@@ -288,6 +306,22 @@ BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
             if(CompareFileInfoAndMark(pLeftFile, pRightFile))
             {
                 logdbg(L"Duplicate file: %S", pszLeftFile);
+            }
+        }
+    }
+
+    // See if dup within files are duplicate
+    for(int i = 0; i < pLeftDir->stDupFilesInTree.nCurFiles; ++i)
+    {
+        pLeftFile = pLeftDir->stDupFilesInTree.apFiles[i];
+        int index = -1;
+        while((index = FindInDupWithinList(pLeftFile->szFilename, &pRightDir->stDupFilesInTree, index + 1)) != -1)
+        {
+            // Same file found in right dir, compare and mark as duplicate
+            pRightFile = pRightDir->stDupFilesInTree.apFiles[index];
+            if(CompareFileInfoAndMark(pLeftFile, pRightFile))
+            {
+                logdbg(L"DupWithin Duplicate file: %S", pszLeftFile);
             }
         }
     }
@@ -486,6 +520,29 @@ BOOL DeleteFilesInDir(
 
 #pragma endregion FileOperations
 
+// Print the dir tree in BFS order, two blank lines separating
+// file listing of each directory
+void PrintDirTree(_In_ PDIRINFO pRootDir)
+{
+    PrintFilesInDir(pRootDir);
+    wprintf(L"\n");
+    // Print any dup within files
+    if(pRootDir->stDupFilesInTree.nCurFiles > 0)
+    {
+        wprintf(L"These are the files that are duplicate within the specified root folder's tree itself:\n");
+        for(int i = 0; i < pRootDir->stDupFilesInTree.nCurFiles; ++i)
+        {
+            PFILEINFO pFileInfo = pRootDir->stDupFilesInTree.apFiles[i];
+            wprintf(L"%10u %c %1d %s\n",
+                pFileInfo->llFilesize.LowPart,
+                pFileInfo->fIsDirectory ? L'D' : L'F',
+                IsDuplicateFile(pFileInfo) ? 1 : 0,
+                pFileInfo->szFilename);
+        }
+    }
+    return;
+}
+
 // Print files in the folder, one on each line. End on a blank line.
 void PrintFilesInDir(_In_ PDIRINFO pDirInfo)
 {
@@ -535,4 +592,30 @@ static BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars)
         }
     }
     return FALSE;
+}
+
+static BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO pFileInfo)
+{
+    if(pDupWithin->nCurFiles < pDupWithin->nCurSize)
+    {
+        pDupWithin->apFiles[pDupWithin->nCurFiles] = pFileInfo;
+        ++(pDupWithin->nCurFiles);
+        return TRUE;
+    }
+    // TODO: Realloc if size is insufficient
+    return FALSE;
+}
+
+static int FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _In_ int iStartIndex)
+{
+    //NT_ASSERT(iStartIndex >= 0 && iStartIndex <= pDupWithinToSearch->nCurFiles);
+    for(int i = iStartIndex; i < pDupWithinToSearch->nCurFiles; ++i)
+    {
+        PFILEINFO pFile = pDupWithinToSearch->apFiles[i];
+        if(_wcsnicmp(pszFilename, pFile->szFilename, MAX_PATH) == 0)
+        {
+            return i;
+        }
+    }
+    return -1;
 }
