@@ -73,7 +73,7 @@ error_return:
 
 void DestroyDirInfo(_In_ PDIRINFO pDirInfo)
 {
-    //NT_ASSERT(pDirInfo);
+    SB_ASSERT(pDirInfo);
 
     if(pDirInfo->phtFiles != NULL)
     {
@@ -147,8 +147,8 @@ error_return:
 // Build the list of files in the given folder.
 BOOL BuildFilesInDir(_In_ PCWSTR pszFolderpath, _In_opt_ PCHL_QUEUE pqDirsToTraverse, _Inout_ PDIRINFO* ppDirInfo)
 {
-    //NT_ASSERT(pszFolderpath);
-    //NT_ASSERT(ppDirInfo);
+    SB_ASSERT(pszFolderpath);
+    SB_ASSERT(ppDirInfo);
 
     if(*ppDirInfo == NULL && FAILED(_Init(pszFolderpath, NULL, ppDirInfo)))
     {
@@ -285,8 +285,8 @@ error_return:
 // duplicate flag to indicate that the file is present in both dirs.
 BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
 {
-    //NT_ASSERT(pLeftDir);
-    //NT_ASSERT(pRightDir);
+    SB_ASSERT(pLeftDir);
+    SB_ASSERT(pRightDir);
 
     // Trivial check for directory to be empty
     if(pLeftDir->nFiles <= 0 || pRightDir->nFiles <= 0)
@@ -347,7 +347,7 @@ BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
             // Same file found in right dir, compare and mark as duplicate
             if(CompareFileInfoAndMark(pLeftFile, pRightFile))
             {
-                logdbg(L"Duplicate file: %S", pszLeftFile);
+                logdbg(L"Duplicate file: %s", pLeftFile->szFilename);
             }
         }
 
@@ -359,7 +359,7 @@ BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
             pRightFile = pRightDir->stDupFilesInTree.apFiles[index];
             if(CompareFileInfoAndMark(pLeftFile, pRightFile))
             {
-                logdbg(L"DupWithin Duplicate file: %S", pszLeftFile);
+                logdbg(L"DupWithin Duplicate file: %s", pLeftFile->szFilename);
             }
         }
     }
@@ -413,7 +413,7 @@ done:
 
 void ClearFilesDupFlag(_In_ PDIRINFO pDirInfo)
 {
-    //NT_ASSERT(pDirInfo);
+    SB_ASSERT(pDirInfo);
 
     if(pDirInfo->nFiles > 0)
     {
@@ -440,7 +440,7 @@ void ClearFilesDupFlag(_In_ PDIRINFO pDirInfo)
 // files in the pDirToUpdate directory.
 BOOL DeleteDupFilesInDir(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdate)
 {
-    //NT_ASSERT(pDirDeleteFrom)
+    SB_ASSERT(pDirDeleteFrom);
 
     loginfo(L"In folder = %s", pDirDeleteFrom->pszPath);
     if(pDirDeleteFrom->nFiles <= 0)
@@ -460,9 +460,6 @@ BOOL DeleteDupFilesInDir(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdat
     PFILEINFO pPrevDupFileInfo = NULL;
     while(fChlDsGetNextHT(pDirDeleteFrom->phtFiles, &itr, &pszFilename, NULL, &pFileInfo, NULL))
     {
-        //NT_ASSERT(nKeySize == sizeof(PWCHAR));
-        //NT_ASSERT(nValSize == sizeof(PFILEINFO));
-
         // The hashtable iterator expects the currently found entry
         // not to be removed until we move to the next entry. Hence,
         // this logic with previous pointer.
@@ -478,7 +475,7 @@ BOOL DeleteDupFilesInDir(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdat
                 _ConvertToAscii(pPrevDupFileInfo->szFilename, szKey);
                 BOOL fFound = fChlDsFindHT(pDirToUpdate->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1,
                                 &pFileToUpdate, NULL);
-                //NT_ASSERT(fFound);    // Must find in the other dir also.
+                SB_ASSERT(fFound);    // Must find in the other dir also.
                 ClearDuplicateAttr(pFileToUpdate);
             }
 
@@ -515,16 +512,15 @@ BOOL DeleteFilesInDir(
     _In_ int nFileNames, 
     _In_ PDIRINFO pDirToUpdate)
 {
-    //NT_ASSERT(pDirDeleteFrom);
-    //NT_ASSERT(apszFileNamesToDelete);
-    //NT_ASSERT(pDirToUpdate);
-    //NT_ASSERT(nFileNames >= 0);
+    SB_ASSERT(pDirDeleteFrom);
+    SB_ASSERT(paszFileNamesToDelete);
+    SB_ASSERT(pDirToUpdate);
+    SB_ASSERT(nFileNames >= 0);
 
     char szKey[MAX_PATH];
     int nKeySize;
     PFILEINFO pFileToDelete;
     PFILEINFO pFileToUpdate;
-    int nValSize;
 
     int index = 0;
     loginfo(L"Deleting %d files from %s", nFileNames, pDirDeleteFrom->pszPath);
@@ -588,7 +584,7 @@ void PrintDirTree(_In_ PDIRINFO pRootDir)
 // Print files in the folder, one on each line. End on a blank line.
 void PrintFilesInDir(_In_ PDIRINFO pDirInfo)
 {
-    //NT_ASSERT(pDirInfo)
+    SB_ASSERT(pDirInfo);
 
     CHL_HT_ITERATOR itr;
     if(!fChlDsInitIteratorHT(&itr))
@@ -603,9 +599,6 @@ void PrintFilesInDir(_In_ PDIRINFO pDirInfo)
     PFILEINFO pFileInfo = NULL;
     while(fChlDsGetNextHT(pDirInfo->phtFiles, &itr, &pszFilename, NULL, &pFileInfo, NULL))
     {
-        //NT_ASSERT(nKeySize == sizeof(PWCHAR));
-        //NT_ASSERT(nValSize == sizeof(PFILEINFO));
-
         wprintf(L"%10u %c %1d %s\n", 
             pFileInfo->llFilesize.LowPart,
             pFileInfo->fIsDirectory ? L'D' : L'F',
@@ -677,7 +670,7 @@ static BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO 
 
 static int FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _In_ int iStartIndex)
 {
-    //NT_ASSERT(iStartIndex >= 0 && iStartIndex <= pDupWithinToSearch->nCurFiles);
+    SB_ASSERT(iStartIndex >= 0 && iStartIndex <= pDupWithinToSearch->nCurFiles);
     for(int i = iStartIndex; i < pDupWithinToSearch->nCurFiles; ++i)
     {
         PFILEINFO pFile = pDupWithinToSearch->apFiles[i];

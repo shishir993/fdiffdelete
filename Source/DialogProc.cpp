@@ -261,7 +261,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                     LPNMLISTVIEW pnmv = (LPNMLISTVIEW)lParam;
                     if(pnmv->hdr.idFrom == IDC_LIST_LEFT)
                     {
-                        //NT_ASSERT(pnmv->iSubItem >= 0 && pnmv->iSubItem <= ARRAYSIZE(pafnLvCompare));
+                        SB_ASSERT(pnmv->iSubItem >= 0 && pnmv->iSubItem <= ARRAYSIZE(pafnLvCompare));
                         SendMessage(uiInfo.hLvLeft, LVM_SORTITEMSEX, (WPARAM)uiInfo.hLvLeft, (LPARAM)pafnLvCompare[pnmv->iSubItem]);
                     }
                     else if(pnmv->hdr.idFrom == IDC_LIST_RIGHT)
@@ -318,7 +318,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 
 BOOL UpdateDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ PDIRINFO* ppDirInfo, _In_ BOOL fRecursive)
 {
-    //NT_ASSERT(ppDirInfo);
+    SB_ASSERT(ppDirInfo);
 
     if(*ppDirInfo != NULL)
     {
@@ -331,7 +331,7 @@ BOOL UpdateDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ PDIRINFO* ppDirInfo, _In_ B
 
 BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive)
 {
-    //NT_ASSERT(pUiInfo);
+    SB_ASSERT(pUiInfo);
 
     BOOL fRetVal = TRUE;
 
@@ -346,7 +346,7 @@ BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive)
         // Must update the right folder, if it is already filled, when updating the left.
         if(pUiInfo->iFSpecState_Right == FSPEC_STATE_FILLED)
         {
-            //NT_ASSERT(pUiInfo->pRightDirInfo);
+            SB_ASSERT(pUiInfo->pRightDirInfo);
             ClearFilesDupFlag(pUiInfo->pRightDirInfo);
             if(!CompareDirsAndMarkFiles(pUiInfo->pLeftDirInfo, pUiInfo->pRightDirInfo))
             {
@@ -381,7 +381,7 @@ BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive)
         // Must update the left folder, if it is already filled, when updating the right.
         if(pUiInfo->iFSpecState_Left == FSPEC_STATE_FILLED)
         {
-            //NT_ASSERT(pUiInfo->pLeftDirInfo);
+            SB_ASSERT(pUiInfo->pLeftDirInfo);
             ClearFilesDupFlag(pUiInfo->pLeftDirInfo);
             if(!CompareDirsAndMarkFiles(pUiInfo->pRightDirInfo, pUiInfo->pLeftDirInfo))
             {

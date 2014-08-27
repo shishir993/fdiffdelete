@@ -12,8 +12,8 @@
 // Populate file info for the specified file in the caller specified memory location
 BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ PFILEINFO pFileInfo)
 {
-    //NT_ASSERT(pszFullpathToFile);
-    //NT_ASSERT(pFileInfo);
+    SB_ASSERT(pszFullpathToFile);
+    SB_ASSERT(pFileInfo);
 
     ZeroMemory(pFileInfo, sizeof(*pFileInfo));
 
@@ -94,8 +94,8 @@ error_return:
 // and return the pointer to this location to the caller.
 BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _Out_ PFILEINFO* ppFileInfo)
 {
-    //NT_ASSERT(pszFullpathToFile);
-    //NT_ASSERT(ppFileInfo);
+    SB_ASSERT(pszFullpathToFile);
+    SB_ASSERT(ppFileInfo);
 
     PFILEINFO pFileInfo;
     pFileInfo = (PFILEINFO)malloc(sizeof(FILEINFO));
@@ -126,8 +126,8 @@ error_return:
 // also set duplicate flag in the file info structs.
 BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO pRightFile)
 {
-    //NT_ASSERT(pLeftFile);
-    //NT_ASSERT(pRightFile);
+    SB_ASSERT(pLeftFile);
+    SB_ASSERT(pRightFile);
 
     // Along with setting bits, must also clear bits 
     // in case of no match because:

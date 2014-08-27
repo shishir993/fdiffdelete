@@ -36,6 +36,9 @@
     <ClInclude Include="UIHelpers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Assert.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DirectoryWalker.cpp">
@@ -51,6 +54,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="UIHelpers.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Assert.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
