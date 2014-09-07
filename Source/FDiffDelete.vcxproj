@@ -110,8 +110,12 @@
     <ClInclude Include="Common.h" />
     <ClInclude Include="DbgHelpers.h" />
     <ClInclude Include="DialogProc.h" />
+    <ClInclude Include="DirectoryWalker_Interface.h" />
+    <ClInclude Include="DirectoryWalker_Hashes.h" />
+    <ClInclude Include="DirectoryWalker_Util.h" />
     <ClInclude Include="FileInfo.h" />
     <ClInclude Include="DirectoryWalker.h" />
+    <ClInclude Include="HashFactory.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="UIHelpers.h" />
   </ItemGroup>
@@ -119,7 +123,11 @@
     <ClCompile Include="Assert.cpp" />
     <ClCompile Include="DialogProc.cpp" />
     <ClCompile Include="DirectoryWalker.cpp" />
+    <ClCompile Include="DirectoryWalker_Hashes.cpp" />
+    <ClCompile Include="DirectoryWalker_Interface.cpp" />
+    <ClCompile Include="DirectoryWalker_Util.cpp" />
     <ClCompile Include="FileInfo.cpp" />
+    <ClCompile Include="HashFactory.cpp" />
     <ClCompile Include="UIHelpers.cpp" />
     <ClCompile Include="WinMain.cpp" />
   </ItemGroup>

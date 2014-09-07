@@ -188,7 +188,7 @@ DllExpImp BOOL fChlDsCreateHT(CHL_HTABLE **pHTableOut, int nEstEntries, int keyT
 DllExpImp BOOL fChlDsDestroyHT(CHL_HTABLE *phtable);
 
 DllExpImp BOOL fChlDsInsertHT (CHL_HTABLE *phtable, void *pvkey, int keySize, void *pval, int valSize);
-DllExpImp BOOL fChlDsFindHT   (CHL_HTABLE *phtable, void *pvkey, int keySize, __out void *pval, __out int *pvalsize);
+DllExpImp BOOL fChlDsFindHT   (CHL_HTABLE *phtable, void *pvkey, int keySize, __in_opt void *pval, __in_opt int *pvalsize);
 DllExpImp BOOL fChlDsRemoveHT (CHL_HTABLE *phtable, void *pvkey, int keySize);
 
 DllExpImp BOOL fChlDsInitIteratorHT(CHL_HT_ITERATOR *pItr);

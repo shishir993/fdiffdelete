@@ -10,10 +10,11 @@
 - User can sort the file list by any of the four columns:
   Name, Duplicacy Type, Modified Date, Size.
 
+Note:
+- There are some bugs to be fixed. Not a fully complete tool yet.
+  
 Features to come:
 - Drag n drop files among the two folders being compared
-- Recursive folder comparison
-- Compare files based on their SHA256 hash values
 
 Author:
 Shishir Bhat (http://www.shishirprasad.net)

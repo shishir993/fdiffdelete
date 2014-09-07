@@ -10,15 +10,11 @@
 
 #include "common.h"
 #include "CHelpLibDll.h"
+#include "HashFactory.h"
 
 // **
 // File attributes considered for duplicate determination are
-// Filename, Filesize (and Filehash). Subsequently, we want
-// to know whether the files match only by 
-// their names or (NOT DUPLICATE)
-// their names and size and hash or (DUPLICATE)
-// their names and size and !hash (NOT DUPLICATE)
-// their size and hash (and !names) (DUPLICATE)
+// Filename, Filesize, Modified time (and File hash). 
 // Bitwise operations with these can help with storing 
 // these in the FILEINFO structure.
 #define FDUP_NO_MATCH       0x00
@@ -38,7 +34,7 @@ typedef struct _FileInfo {
     BYTE bDupInfo;
     
     LARGE_INTEGER llFilesize;
-    BYTE abHash[HASHLEN_SHA256];
+    BYTE abHash[HASHLEN_SHA1];
     SYSTEMTIME stModifiedTime;
     FILETIME ftModifiedTime;
 
@@ -49,17 +45,24 @@ typedef struct _FileInfo {
 
 #define ClearDuplicateAttr(pFileInfo)   (pFileInfo->bDupInfo = FDUP_NO_MATCH)
 
+// Functions
+
+HRESULT FileInfoInit(_In_ BOOL fComputeHash);
+void FileInfoDestroy();
+
 // Populate file info for the specified file in the caller specified memory location
-BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ PFILEINFO pFileInfo);
+BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ BOOL fComputeHash, _In_ PFILEINFO pFileInfo);
 
 // Populate file info for the specified file in the callee heap-allocated memory location
 // and return the pointer to this location to the caller.
-BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _Out_ PFILEINFO* ppFileInfo);
+BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ BOOL fComputeHash, _Out_ PFILEINFO* ppFileInfo);
 
 // Compare two file info structs and say whether they are equal or not,
 // also set duplicate flag in the file info structs.
-BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO pRightFile);
+BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO pRightFile, _In_ BOOL fCompareHashes);
 
 inline BOOL IsDuplicateFile(_In_ const PFILEINFO pFileInfo);
 
 void GetDupTypeString(_In_ PFILEINFO pFileInfo, _Inout_z_ PWSTR pszDupType);
+
+BOOL CompareFilesByName(_In_ PVOID pLeftFile, _In_ PVOID pRightFile);

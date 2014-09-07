@@ -11,6 +11,7 @@
 #include "resource.h"
 #include "CHelpLibDll.h"
 #include "UIHelpers.h"
+#include "DirectoryWalker_Interface.h"
 
 #define WM_UPDATE_LEFT      (WM_USER + 1)   // wParam = TRUE/FALSE path stored in FDIFFUI_INFO.szFolderpath* or not, LPARAM = not used.
 #define WM_UPDATE_RIGHT     (WM_USER + 2)   // same as above
@@ -46,13 +47,26 @@ typedef struct _FDiffUiInfo
 
 // File local variables
 static WCHAR* aszColumnNames[] = { L"Name", L"DType", L"Folder", L"MDate", L"Size" };
-static int aiColumnWidthPercent[] = { 40, 10, 10, 25, 15 };
+static int aiColumnWidthPercent[] =
+{ 
+    40,     // Name
+    10,     // DupType
+    20,     // Folder
+    15,     // Modified Date
+    15      // Size
+};
 int (CALLBACK *pafnLvCompare[])(LPARAM, LPARAM, LPARAM) = { lvCmpName, lvCmpDupType, lvCmpPath, lvCmpDate, lvCmpSize };
 
 // File local function prototypes
-static BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive);
-static BOOL UpdateDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ PDIRINFO* ppDirInfo, _In_ BOOL fRecursive);
+static BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive, _In_ BOOL fCompareHashes);
+static BOOL UpdateDirInfo(
+    _In_z_ PCWSTR pszFolderpath,
+    _In_ PDIRINFO* ppDirInfo,
+    _In_ BOOL fRecursive,
+    _In_ BOOL fCompareHashes);
+
 static BOOL CheckShowInvalidDirMBox(_In_ HWND hDlg, _In_ PCWSTR pszFolderpath);
+static BOOL OnHashCompareToggle(_In_ HWND hDlg, _In_ FDIFFUI_INFO *pUiInfo);
 
 // Function definitions
 
@@ -96,6 +110,8 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                 uiInfo.pRightDirInfo = NULL;
             }
 
+            FileInfoDestroy();
+
 			EndDialog(hDlg, 0);
 			return TRUE;
 		}
@@ -126,6 +142,44 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 			// handle commands from child controls
 			switch(LOWORD(wParam))
 			{
+                case IDM_ENABLEHASHCOMPARE:
+                {
+                    if(OnHashCompareToggle(hDlg, &uiInfo))
+                    {
+                        HMENU hMenu = GetMenu(hDlg);
+                        if(IsMenuItemChecked(hMenu, IDM_ENABLEHASHCOMPARE))
+                        {
+                            // Remove check mark
+                            CheckMenuItem(hMenu, IDM_ENABLEHASHCOMPARE, MF_BYCOMMAND | MF_UNCHECKED);
+                        }
+                        else
+                        {
+                            CheckMenuItem(hMenu, IDM_ENABLEHASHCOMPARE, MF_BYCOMMAND | MF_CHECKED);
+                        }
+                    }
+                    return 0;
+                }
+
+                case IDM_ENABLERECURSIVECOMPARE:
+                {
+                    HMENU hMenu = GetMenu(hDlg);
+                    if(IsMenuItemChecked(hMenu, IDM_ENABLERECURSIVECOMPARE))
+                    {
+                        // Remove check mark
+                        CheckMenuItem(hMenu, IDM_ENABLERECURSIVECOMPARE, MF_BYCOMMAND | MF_UNCHECKED);
+                    }
+                    else
+                    {
+                        CheckMenuItem(hMenu, IDM_ENABLERECURSIVECOMPARE, MF_BYCOMMAND | MF_CHECKED);
+                    }
+                    return 0;
+                }
+
+                case IDM_ABOUT:
+                {
+                    break;
+                }
+
                 case IDC_BTN_BRWS_LEFT:
                     if(SUCCEEDED(GetFolderToOpen(uiInfo.szFolderpathLeft)))
                     {
@@ -174,41 +228,76 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                             SendMessage(hDlg, WM_UPDATE_RIGHT, TRUE, (LPARAM)NULL);
                         }
                     }
+                    return TRUE;
 
                 case IDC_BTN_DEL_LEFT:
                 {
+                    BOOL fSucceeded = FALSE;
                     int nItemsSel;
-                    PWSTR paszFiles;
-                    if(GetSelectedLvItemsText(uiInfo.hLvLeft, &paszFiles, &nItemsSel, MAX_PATH))
+                    if(uiInfo.pLeftDirInfo->fHashCompare)
                     {
-                        DeleteFilesInDir(uiInfo.pLeftDirInfo, paszFiles, nItemsSel, uiInfo.pRightDirInfo);
-                        free(paszFiles);
-                        paszFiles = NULL;
+                        PFILEINFO *ppFiles;
+                        if(GetSelectedLvItemsText_Hash(uiInfo.hLvLeft, &ppFiles, &nItemsSel))
+                        {
+                            fSucceeded = DeleteFilesInDir(uiInfo.pLeftDirInfo, ppFiles, nItemsSel, uiInfo.pRightDirInfo);
+                            free(ppFiles);
+                            ppFiles = NULL;
+                        }
+                    }
+                    else
+                    {
+                        PWSTR paszFiles;
+                        if(GetSelectedLvItemsText(uiInfo.hLvLeft, &paszFiles, &nItemsSel, MAX_PATH))
+                        {
+                            fSucceeded = DeleteFilesInDir(uiInfo.pLeftDirInfo, paszFiles, nItemsSel, uiInfo.pRightDirInfo);
+                            free(paszFiles);
+                            paszFiles = NULL;
+                        }
+                    }
 
+                    if(fSucceeded)
+                    {
                         // Update the list views
                         // TODO: This function destroys dir info and rebuilds it. Not necessary.
-                        BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
+                        BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
                         uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
-                        UpdateFileListViews(&uiInfo, fRecursive);
+                        UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
                     }
                     return TRUE;
                 }
 
                 case IDC_BTN_DEL_RIGHT:
                 {
+                    BOOL fSucceeded = FALSE;
                     int nItemsSel;
-                    PWSTR paszFiles;
-                    if(GetSelectedLvItemsText(uiInfo.hLvRight, &paszFiles, &nItemsSel, MAX_PATH))
+                    if(uiInfo.pRightDirInfo->fHashCompare)
                     {
-                        DeleteFilesInDir(uiInfo.pRightDirInfo, paszFiles, nItemsSel, uiInfo.pLeftDirInfo);
-                        free(paszFiles);
-                        paszFiles = NULL;
+                        PFILEINFO *ppFiles;
+                        if(GetSelectedLvItemsText_Hash(uiInfo.hLvRight, &ppFiles, &nItemsSel))
+                        {
+                            fSucceeded = DeleteFilesInDir(uiInfo.pRightDirInfo, ppFiles, nItemsSel, uiInfo.pLeftDirInfo);
+                            free(ppFiles);
+                            ppFiles = NULL;
+                        }
+                    }
+                    else
+                    {
+                        PWSTR paszFiles;
+                        if(GetSelectedLvItemsText(uiInfo.hLvRight, &paszFiles, &nItemsSel, MAX_PATH))
+                        {
+                            fSucceeded = DeleteFilesInDir(uiInfo.pRightDirInfo, paszFiles, nItemsSel, uiInfo.pLeftDirInfo);
+                            free(paszFiles);
+                            paszFiles = NULL;
+                        }
+                    }
 
+                    if(fSucceeded)
+                    {
                         // Update the list views
                         // TODO: This function destroys dir info and rebuilds it. Not necessary.
-                        BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
+                        BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
                         uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
-                        UpdateFileListViews(&uiInfo, fRecursive);
+                        UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
                     }
                     return TRUE;
                 }
@@ -216,8 +305,6 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                 case IDC_BTN_DELALL_LEFT:
                     if(uiInfo.pLeftDirInfo != NULL)
                     {
-                        BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
-
                         // NULL check for the second parameter is in the callee
                         DeleteDupFilesInDir(uiInfo.pLeftDirInfo, uiInfo.pRightDirInfo);
                         uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
@@ -227,14 +314,16 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                         {
                             uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
                         }
-                        UpdateFileListViews(&uiInfo, fRecursive);
+
+                        BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
+                        UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
                     }
                     return TRUE;
 
                 case IDC_BTN_DELALL_RIGHT:
                     if(uiInfo.pRightDirInfo != NULL)
                     {
-                        BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
+                        BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
 
                         // NULL check for the second parameter is in the callee
                         DeleteDupFilesInDir(uiInfo.pRightDirInfo, uiInfo.pLeftDirInfo);
@@ -245,7 +334,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                         {
                             uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
                         }
-                        UpdateFileListViews(&uiInfo, fRecursive);
+                        UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
                     }
                     return TRUE;
 			}
@@ -286,9 +375,9 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
             fRetVal &= CheckShowInvalidDirMBox(hDlg, uiInfo.szFolderpathLeft);
             if(fRetVal)
             {
-                BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_LEFT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
+                BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
                 uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
-                UpdateFileListViews(&uiInfo, fRecursive);
+                UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
             }
             return TRUE;
         }
@@ -305,9 +394,9 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
             fRetVal &= CheckShowInvalidDirMBox(hDlg, uiInfo.szFolderpathRight);
             if(fRetVal)
             {
-                BOOL fRecursive = SendMessage(GetDlgItem(hDlg, IDC_CHECK_RIGHT), BM_GETCHECK, 0, (LPARAM)NULL) == BST_CHECKED ? TRUE : FALSE;
+                BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
                 uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
-                UpdateFileListViews(&uiInfo, fRecursive);
+                UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
             }
             return TRUE;
         }
@@ -316,7 +405,11 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 	return FALSE;
 }
 
-BOOL UpdateDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ PDIRINFO* ppDirInfo, _In_ BOOL fRecursive)
+static BOOL UpdateDirInfo(
+    _In_z_ PCWSTR pszFolderpath,
+    _In_ PDIRINFO* ppDirInfo,
+    _In_ BOOL fRecursive,
+    _In_ BOOL fCompareHashes)
 {
     SB_ASSERT(ppDirInfo);
 
@@ -326,10 +419,10 @@ BOOL UpdateDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ PDIRINFO* ppDirInfo, _In_ B
         *ppDirInfo = NULL;
     }
 
-    return BuildDirInfo(pszFolderpath, fRecursive, ppDirInfo);
+    return BuildDirInfo(pszFolderpath, fRecursive, fCompareHashes, ppDirInfo);
 }
 
-BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive)
+BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive, _In_ BOOL fCompareHashes)
 {
     SB_ASSERT(pUiInfo);
 
@@ -337,8 +430,8 @@ BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive)
 
     if(pUiInfo->iFSpecState_Left == FSPEC_STATE_TOUPDATE)
     {
-        // NT_ASSERT(pUiInfo->szFolderpathLeft);
-        if(!UpdateDirInfo(pUiInfo->szFolderpathLeft, &pUiInfo->pLeftDirInfo, fRecursive))
+        SB_ASSERT(pUiInfo->szFolderpathLeft);
+        if(!UpdateDirInfo(pUiInfo->szFolderpathLeft, &pUiInfo->pLeftDirInfo, fRecursive, fCompareHashes))
         {
             goto error_return;
         }
@@ -353,7 +446,7 @@ BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive)
                 goto error_return;
             }
 
-            if(PopulateFileList(pUiInfo->hLvRight, pUiInfo->pRightDirInfo))
+            if(PopulateFileList(pUiInfo->hLvRight, pUiInfo->pRightDirInfo, fCompareHashes))
             {
                 WCHAR szStats[32];
                 swprintf_s(szStats, ARRAYSIZE(szStats), L"%d folders, %d files.", pUiInfo->pRightDirInfo->nDirs, pUiInfo->pRightDirInfo->nFiles);
@@ -361,7 +454,7 @@ BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive)
             }
         }
 
-        if(PopulateFileList(pUiInfo->hLvLeft, pUiInfo->pLeftDirInfo))
+        if(PopulateFileList(pUiInfo->hLvLeft, pUiInfo->pLeftDirInfo, fCompareHashes))
         {
             pUiInfo->iFSpecState_Left = FSPEC_STATE_FILLED;
 
@@ -372,8 +465,8 @@ BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive)
     }
     else if(pUiInfo->iFSpecState_Right == FSPEC_STATE_TOUPDATE)
     {
-        // NT_ASSERT(pUiInfo->szFolderpathRight);
-        if(!UpdateDirInfo(pUiInfo->szFolderpathRight, &pUiInfo->pRightDirInfo, fRecursive))
+        SB_ASSERT(pUiInfo->szFolderpathRight);
+        if(!UpdateDirInfo(pUiInfo->szFolderpathRight, &pUiInfo->pRightDirInfo, fRecursive, fCompareHashes))
         {
             goto error_return;
         }
@@ -388,7 +481,7 @@ BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive)
                 goto error_return;
             }
 
-            if(PopulateFileList(pUiInfo->hLvLeft, pUiInfo->pLeftDirInfo))
+            if(PopulateFileList(pUiInfo->hLvLeft, pUiInfo->pLeftDirInfo, fCompareHashes))
             {
                 WCHAR szStats[32];
                 swprintf_s(szStats, ARRAYSIZE(szStats), L"%d folders, %d files.", pUiInfo->pLeftDirInfo->nDirs, pUiInfo->pLeftDirInfo->nFiles);
@@ -396,7 +489,7 @@ BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive)
             }
         }
 
-        if(PopulateFileList(pUiInfo->hLvRight, pUiInfo->pRightDirInfo))
+        if(PopulateFileList(pUiInfo->hLvRight, pUiInfo->pRightDirInfo, fCompareHashes))
         {
             pUiInfo->iFSpecState_Right = FSPEC_STATE_FILLED;
 
@@ -432,4 +525,40 @@ static BOOL CheckShowInvalidDirMBox(_In_ HWND hDlg, _In_ PCWSTR pszFolderpath)
         MessageBox(hDlg, szMsg, L"Error", MB_OK | MB_ICONEXCLAMATION);
     }
     return fValidFolder;
+}
+
+static BOOL OnHashCompareToggle(_In_ HWND hDlg, _In_ FDIFFUI_INFO *pUiInfo)
+{
+    // Nothing to ask and delete if both are already empty
+    if(pUiInfo->iFSpecState_Left == FSPEC_STATE_EMPTY && pUiInfo->iFSpecState_Right == FSPEC_STATE_EMPTY)
+    {
+        return TRUE;
+    }
+
+    BOOL fContinue = FALSE;
+    int iUserChoice = MessageBoxW(hDlg, L"Toggling this clears out the populated lists, if any. Proceed?", L"Continue?", MB_YESNO|MB_ICONQUESTION);
+    if(iUserChoice == IDYES)
+    {
+        fContinue = TRUE;
+        if(pUiInfo->pLeftDirInfo)
+        {
+            ListView_DeleteAllItems(pUiInfo->hLvLeft);
+            SetWindowText(pUiInfo->hStaticLeft, L"");
+
+            DestroyDirInfo(pUiInfo->pLeftDirInfo);
+            pUiInfo->pLeftDirInfo = NULL;
+            pUiInfo->iFSpecState_Left = FSPEC_STATE_EMPTY;
+        }
+
+        if(pUiInfo->pRightDirInfo)
+        {
+            ListView_DeleteAllItems(pUiInfo->hLvRight);
+            SetWindowText(pUiInfo->hStaticRight, L"");
+
+            DestroyDirInfo(pUiInfo->pRightDirInfo);
+            pUiInfo->pRightDirInfo = NULL;
+            pUiInfo->iFSpecState_Right = FSPEC_STATE_EMPTY;
+        }
+    }
+    return fContinue;
 }

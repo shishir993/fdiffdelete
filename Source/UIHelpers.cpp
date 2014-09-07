@@ -9,12 +9,14 @@
 
 #include "UIHelpers.h"
 #include <Shobjidl.h>
+#include <ShellAPI.h>
 #include "FileInfo.h"
 
 #define ONE_KBYTES    1024ll
 #define ONE_MBYTES    (ONE_KBYTES * 1024ll)
 #define ONE_GBYTES    (ONE_MBYTES * 1024ll)
 
+static BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo);
 static void ConstructListViewRow(_In_ PFILEINFO pFileInfo, _In_ PWSTR *apsz);
 
 HRESULT GetFolderToOpen(_Out_z_cap_(MAX_PATH) PWSTR pszFolderpath)
@@ -104,6 +106,22 @@ BOOL GetTextFromEditControl(_In_ HWND hEditControl, _Inout_z_ WCHAR* pszFolderpa
     return TRUE;
 }
 
+BOOL IsMenuItemChecked(_In_ HMENU hMenu, _In_ UINT uiItemId)
+{
+    BOOL fRetVal = FALSE;
+
+    UINT uiState = GetMenuState(hMenu, uiItemId, MF_BYCOMMAND);
+    if(uiState != -1)
+    {
+        fRetVal = (uiState & MF_CHECKED) ? TRUE : FALSE;
+    }
+    else
+    {
+        logerr(L"GetMenuState() failed.");
+    }
+    return fRetVal;
+}
+
 BOOL GetSelectedLvItemsText(
     _In_ HWND hListView, 
     _Out_ PWSTR *ppaszFiles,
@@ -150,7 +168,57 @@ error_return:
     return FALSE;
 }
 
-BOOL BuildDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIRINFO *ppDirInfo)
+BOOL GetSelectedLvItemsText_Hash(
+    _In_ HWND hListView, 
+    _Out_ PFILEINFO **pppaFileInfo,
+    _Out_ PINT pnItems)
+{
+    // Get all selected items from the list view
+    UINT nItems = SendMessage(hListView, LVM_GETSELECTEDCOUNT, 0, (LPARAM)NULL);
+    if(nItems <= 0)
+    {
+        goto error_return;
+    }
+
+    // TODO: Check for overflow in the below calculation
+    PFILEINFO *ppaFiles = NULL;
+    ppaFiles = (PFILEINFO*)malloc(nItems * sizeof PFILEINFO);
+    if(ppaFiles == NULL)
+    {
+        logerr(L"Out of memory.");
+        goto error_return;
+    }
+
+    int iSelected = -1;
+    int iIdx = 0;
+    while((iSelected = SendMessage(hListView, LVM_GETNEXTITEM, iSelected, LVIS_SELECTED)) != -1)
+    {
+        LVITEM lvItem = {0};
+        lvItem.iItem = iSelected;
+        lvItem.mask = LVIF_PARAM;
+        SendMessage(hListView, LVM_GETITEM, 0, (LPARAM)&lvItem);
+
+        PFILEINFO pFileSel = (PFILEINFO)lvItem.lParam;
+        logdbg(L"Selected item: %s", pFileSel->szFilename);
+
+        ppaFiles[iIdx++] = pFileSel;
+    }
+
+    *pppaFileInfo = ppaFiles;
+    *pnItems = nItems;
+    return TRUE;
+
+error_return:
+    *pnItems = 0;
+    *pppaFileInfo = NULL;
+    return FALSE;
+}
+
+BOOL BuildDirInfo(
+    _In_z_ PCWSTR pszFolderpath,
+    _In_ BOOL fRecursive,
+    _In_ BOOL fCompareHashes,
+    _Out_ PDIRINFO *ppDirInfo)
 {
     // Check if folder exists or not
     if(!PathFileExists(pszFolderpath))
@@ -159,10 +227,19 @@ BOOL BuildDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIRI
         return FALSE;
     }
     
+    if(fCompareHashes)
+    {
+        if(FAILED(FileInfoInit(TRUE)))
+        {
+            logerr(L"Cannot initialize FileInfo for hash comparisons.");
+            return FALSE;
+        }
+    }
+
     PDIRINFO pDir = NULL;
     if(fRecursive)
     {
-        if(!BuildDirTree(pszFolderpath, &pDir))
+        if(!BuildDirTree(pszFolderpath, fCompareHashes, &pDir))
         {
             logerr(L"Cannot recursive build files in folder: %s", pszFolderpath);
             goto error_return;
@@ -170,7 +247,7 @@ BOOL BuildDirInfo(_In_z_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIRI
     }
     else
     {
-        if(!BuildFilesInDir(pszFolderpath, NULL, &pDir))
+        if(!BuildFilesInDir(pszFolderpath, NULL, fCompareHashes, &pDir))
         {
             logerr(L"Cannot list files in folder: %s", pszFolderpath);
             goto error_return;
@@ -190,7 +267,7 @@ error_return:
     return FALSE;
 }
 
-BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo)
+static BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo)
 {
     ListView_DeleteAllItems(hList);
     if(pDirInfo->nFiles <= 0)
@@ -247,6 +324,65 @@ BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo)
     return fRetVal;
 }
 
+BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo, _In_ BOOL fCompareHashes)
+{
+    if(!fCompareHashes)
+    {
+        return PopulateFileList(hList, pDirInfo);
+    }
+
+    ListView_DeleteAllItems(hList);
+    if(pDirInfo->nFiles <= 0)
+    {
+        return TRUE;
+    }
+
+    CHL_HT_ITERATOR itr;
+    fChlDsInitIteratorHT(&itr);
+
+    WCHAR szDupType[10];    // N,S,D,H (name, size, date, hash)
+    WCHAR szDateTime[32];   // 08/13/2014 5:55 PM
+    WCHAR szSize[16];       // formatted to show KB, MB, GB
+    
+    PWCHAR apszListRow[] = {NULL, szDupType, NULL, szDateTime, szSize};
+
+    // For each file in the dir, convert relevant attributes into 
+    // strings and insert into the list view row by row.
+    BOOL fRetVal = TRUE;
+
+    char* pszKey;
+    PCHL_LLIST pList;
+    while(fChlDsGetNextHT(pDirInfo->phtFiles, &itr, &pszKey, NULL, &pList, NULL))
+    {
+        // Foreach file in the linked list, insert into list view
+        PFILEINFO pFileInfo;
+        for(int i = 0; i < pList->nCurNodes; ++i)
+        {
+            if(!fChlDsPeekAtLL(pList, i, (void**)&pFileInfo))
+            {
+                logerr(L"Cannot get item %d for hash string %S", i, pszKey);
+                continue;
+            }
+
+            ConstructListViewRow(pFileInfo, apszListRow);
+            if(!fChlGuiAddListViewRow(hList, apszListRow, ARRAYSIZE(apszListRow), (LPARAM)pFileInfo))
+            {
+                logerr(L"Error inserting into file list");
+                fRetVal = FALSE;
+                break;
+            }
+        }
+    }
+
+    // Clear list view if there was an error.
+    if(!fRetVal)
+    {
+        ListView_DeleteAllItems(hList);
+    }
+
+    return fRetVal;
+}
+
 static void ConstructListViewRow(_In_ PFILEINFO pFileInfo, _In_ PWSTR *apsz)
 {
     apsz[0] = pFileInfo->szFilename;
@@ -290,6 +426,8 @@ static void ConstructListViewRow(_In_ PFILEINFO pFileInfo, _In_ PWSTR *apsz)
         swprintf_s(apsz[4], 16, L"%lld %s", llFileSize, pszSizeMarker);
     }
 }
+
+#pragma region LvCompares
 
 // ** Listview sorting Callbacks
 // lParam1: is the value associated with the first item being compared
@@ -447,5 +585,4 @@ int CALLBACK lvCmpSize(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
     return 1;
 }
 
-
-
+#pragma endregion LvCompares

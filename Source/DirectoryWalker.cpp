@@ -8,6 +8,8 @@
 //
 
 #include "DirectoryWalker.h"
+#include "DirectoryWalker_Util.h"
+#include "HashFactory.h"
 
 #define DDUP_NO_MATCH       0
 #define DDUP_SOME_MATCH     1
@@ -15,23 +17,16 @@
 
 #define INIT_DUP_WITHIN_SIZE    32
 
-static WCHAR *g_apszBannedFilesFolders[] = 
-{
-    L".",
-    L"..",
-    L"$RECYCLE.BIN",
-    L"System Volume Information",
-
-    L"desktop.ini"
-};
-
-static void _ConvertToAscii(_In_ PCWSTR pwsz, _Out_ char* psz);
-static BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars);
 static BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO pFileInfo);
 static int FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _In_ int iStartIndex);
 static BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES_WITHIN pDupWithinToSearch);
+static BOOL InsertIntoFileList(_In_ PDIRINFO pDirInfo, _In_opt_ PCWSTR pszKey, _In_ PFILEINFO pFile);
+static BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir);
 
-static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_opt_ const PDIRINFO pParentDir, _Out_ PDIRINFO* ppDirInfo)
+static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo);
+static BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDeleteFrom, _In_opt_ PDIRINFO pUpdateDir);
+
+static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIRINFO* ppDirInfo)
 {
     HRESULT hr = S_OK;
     PDIRINFO pDirInfo = (PDIRINFO)malloc(sizeof(DIRINFO));
@@ -43,7 +38,8 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_opt_ const PDIRINFO pParentD
 
     ZeroMemory(pDirInfo, sizeof(*pDirInfo));
     wcscpy_s(pDirInfo->pszPath, ARRAYSIZE(pDirInfo->pszPath), pszFolderpath);
-    if(!fChlDsCreateHT(&pDirInfo->phtFiles, 256, HT_KEY_STR, HT_VAL_PTR, TRUE))
+    int nEstEntries = fRecursive ? 2048 : 256;
+    if(!fChlDsCreateHT(&pDirInfo->phtFiles, nEstEntries, HT_KEY_STR, HT_VAL_PTR, TRUE))
     {
         logerr(L"Couldn't create hash table for dir: %s", pszFolderpath);
         hr = E_FAIL;
@@ -66,12 +62,12 @@ error_return:
     *ppDirInfo = NULL;
     if(pDirInfo != NULL)
     {
-        DestroyDirInfo(pDirInfo);
+        DestroyDirInfo_NoHash(pDirInfo);
     }
     return hr;
 }
 
-void DestroyDirInfo(_In_ PDIRINFO pDirInfo)
+void DestroyDirInfo_NoHash(_In_ PDIRINFO pDirInfo)
 {
     SB_ASSERT(pDirInfo);
 
@@ -100,7 +96,7 @@ void DestroyDirInfo(_In_ PDIRINFO pDirInfo)
 }
 
 // Build a tree 
-BOOL BuildDirTree(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
+BOOL BuildDirTree_NoHash(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
 {
     PCHL_QUEUE pqDirsToTraverse;
     if(FAILED(CHL_QueueCreate(&pqDirsToTraverse, CHL_VT_PVOID, 20)))
@@ -114,7 +110,7 @@ BOOL BuildDirTree(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
     // Init the first dir to traverse. 
     // ** IMP: pFirst must be NULL here so that a new object is created in callee
     PDIRINFO pFirstDir = NULL;
-    if(!BuildFilesInDir(pszRootpath, pqDirsToTraverse, &pFirstDir))
+    if(!BuildFilesInDir_NoHash(pszRootpath, pqDirsToTraverse, &pFirstDir))
     {
         logerr(L"Could not build files in dir: %s", pszRootpath);
         goto error_return;
@@ -124,7 +120,7 @@ BOOL BuildDirTree(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
     while(SUCCEEDED(pqDirsToTraverse->Delete(pqDirsToTraverse, (PVOID*)&pDirToTraverse)))
     {
         loginfo(L"Continuing traversal in dir: %s", pDirToTraverse->pszPath);
-        if(!BuildFilesInDir(pDirToTraverse->pszPath, pqDirsToTraverse, &pFirstDir))
+        if(!BuildFilesInDir_NoHash(pDirToTraverse->pszPath, pqDirsToTraverse, &pFirstDir))
         {
             logerr(L"Could not build files in dir: %s. Continuing...", pDirToTraverse->pszPath);
         }
@@ -145,12 +141,16 @@ error_return:
 }
 
 // Build the list of files in the given folder.
-BOOL BuildFilesInDir(_In_ PCWSTR pszFolderpath, _In_opt_ PCHL_QUEUE pqDirsToTraverse, _Inout_ PDIRINFO* ppDirInfo)
+BOOL BuildFilesInDir_NoHash(
+    _In_ PCWSTR pszFolderpath, 
+    _In_opt_ PCHL_QUEUE pqDirsToTraverse, 
+    _Inout_ PDIRINFO* ppDirInfo)
 {
     SB_ASSERT(pszFolderpath);
     SB_ASSERT(ppDirInfo);
 
-    if(*ppDirInfo == NULL && FAILED(_Init(pszFolderpath, NULL, ppDirInfo)))
+    loginfo(L"Building dir: %s", pszFolderpath);
+    if(*ppDirInfo == NULL && FAILED(_Init(pszFolderpath, (pqDirsToTraverse != NULL), ppDirInfo)))
     {
         logerr(L"Init failed for dir: %s", pszFolderpath);
         goto error_return;
@@ -202,32 +202,41 @@ BOOL BuildFilesInDir(_In_ PCWSTR pszFolderpath, _In_opt_ PCHL_QUEUE pqDirsToTrav
         }
 
         PFILEINFO pFileInfo;
-        if(!CreateFileInfo(szSearchpath, &pFileInfo))
+        if(!CreateFileInfo(szSearchpath, FALSE, &pFileInfo))
         {
             // Treat as warning and move on.
             logwarn(L"Unable to get file info for: %s", szSearchpath);
             continue;
         }
 
-        // If pqDirsToTraverse is not null, it means caller wants recursive directory traversal
-        if(pqDirsToTraverse && pFileInfo->fIsDirectory)
+        if(pFileInfo->fIsDirectory)
         {
-            PDIRINFO pSubDir;
-            if(FAILED(_Init(szSearchpath, pCurDirInfo, &pSubDir)))
+            // If pqDirsToTraverse is not null, it means caller wants recursive directory traversal
+            if(pqDirsToTraverse)
             {
-                logwarn(L"Unable to init dir info for: %s", szSearchpath);
-                free(pFileInfo);
-                continue;
-            }
+                PDIRINFO pSubDir;
+                if(FAILED(_Init(szSearchpath, TRUE, &pSubDir)))
+                {
+                    logwarn(L"Unable to init dir info for: %s", szSearchpath);
+                    free(pFileInfo);
+                    continue;
+                }
 
-            // Insert pSubDir into the queue so that it will be traversed later
-            if(FAILED(pqDirsToTraverse->Insert(pqDirsToTraverse, pSubDir, sizeof *pSubDir)))
-            {
-                logwarn(L"Unable to add sub dir [%s] to traversal queue, cur dir: %s", findData.cFileName, pszFolderpath);
-                free(pFileInfo);
-                continue;
+                // Insert pSubDir into the queue so that it will be traversed later
+                if(FAILED(pqDirsToTraverse->Insert(pqDirsToTraverse, &pSubDir, sizeof pSubDir)))
+                {
+                    logwarn(L"Unable to add sub dir [%s] to traversal queue, cur dir: %s", findData.cFileName, pszFolderpath);
+                    free(pFileInfo);
+                    continue;
+                }
+                ++(pCurDirInfo->nDirs);
             }
-            ++(pCurDirInfo->nDirs);
+            else
+            {
+                // Ignore directories when recursive mode is turned OFF
+                free(pFileInfo);
+                logdbg(L"Skipped adding dir: %s", findData.cFileName);
+            }
         }
         else
         {
@@ -235,26 +244,30 @@ BOOL BuildFilesInDir(_In_ PCWSTR pszFolderpath, _In_opt_ PCHL_QUEUE pqDirsToTrav
             char szKey[MAX_PATH];
             _ConvertToAscii(findData.cFileName, szKey);
             int nSize = strnlen_s(szKey, MAX_PATH) + 1;
+
             // If the current file's name is already inserted, then add it to the
             // dup within list
+            BOOL fFileAdded = TRUE;
             if(fChlDsFindHT(pCurDirInfo->phtFiles, szKey, nSize, NULL, NULL))
             {
-                AddToDupWithinList(&pCurDirInfo->stDupFilesInTree, pFileInfo);
+                fFileAdded = AddToDupWithinList(&pCurDirInfo->stDupFilesInTree, pFileInfo);
             }
             else
             {
-
-                if(!fChlDsInsertHT(pCurDirInfo->phtFiles, szKey, nSize, pFileInfo, sizeof(pFileInfo)))
-                {
-                    logerr(L"Cannot add to file list: %s", szSearchpath);
-                    free(pFileInfo);
-                    goto error_return;
-                }
+                fFileAdded = fChlDsInsertHT(pCurDirInfo->phtFiles, szKey, nSize, pFileInfo, sizeof pFileInfo);
             }
 
-            ++(pCurDirInfo->nFiles);
+            if(!fFileAdded)
+            {
+                logerr(L"Cannot add file to file list: %s", findData.cFileName);
+                free(pFileInfo);
+            }
+            else
+            {
+                ++(pCurDirInfo->nFiles);
+                logdbg(L"Added file: %s", findData.cFileName);
+            }
         }
-
     } while(FindNextFile(hFindFile, &findData));
 
     if(GetLastError() != ERROR_NO_MORE_FILES)
@@ -274,7 +287,7 @@ error_return:
 
     if(*ppDirInfo != NULL)
     {
-        DestroyDirInfo(*ppDirInfo);
+        DestroyDirInfo_NoHash(*ppDirInfo);
         *ppDirInfo = NULL;
     }
 
@@ -283,7 +296,7 @@ error_return:
 
 // Given two DIRINFO objects, compare the files in them and set each file's
 // duplicate flag to indicate that the file is present in both dirs.
-BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
+BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
 {
     SB_ASSERT(pLeftDir);
     SB_ASSERT(pRightDir);
@@ -314,7 +327,7 @@ BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
         if(fChlDsFindHT(pRightDir->phtFiles, (void*)pszLeftFile, nLeftKeySize, &pRightFile, NULL))
         {
             // Same file found in right dir, compare and mark as duplicate
-            if(CompareFileInfoAndMark(pLeftFile, pRightFile))
+            if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
                 logdbg(L"Duplicate file: %S", pszLeftFile);
             }
@@ -325,7 +338,7 @@ BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
         {
             // Same file found in right dir, compare and mark as duplicate
             pRightFile = pRightDir->stDupFilesInTree.apFiles[index];
-            if(CompareFileInfoAndMark(pLeftFile, pRightFile))
+            if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
                 logdbg(L"DupWithin Duplicate file: %S", pszLeftFile);
             }
@@ -345,7 +358,7 @@ BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
         if(fChlDsFindHT(pRightDir->phtFiles, (void*)szKey, nLeftKeySize, &pRightFile, NULL))
         {
             // Same file found in right dir, compare and mark as duplicate
-            if(CompareFileInfoAndMark(pLeftFile, pRightFile))
+            if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
                 logdbg(L"Duplicate file: %s", pLeftFile->szFilename);
             }
@@ -357,7 +370,7 @@ BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
         {
             // Same file found in right dir, compare and mark as duplicate
             pRightFile = pRightDir->stDupFilesInTree.apFiles[index];
-            if(CompareFileInfoAndMark(pLeftFile, pRightFile))
+            if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
                 logdbg(L"DupWithin Duplicate file: %s", pLeftFile->szFilename);
             }
@@ -372,49 +385,9 @@ error_return:
 
 #pragma region FileOperations
 
-static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
-{
-    BOOL fRetVal = TRUE;
-
-    // Remove from file list
-    // The hashtable supports only char* keys
-    char szKey[MAX_PATH];
-    _ConvertToAscii(pFileInfo->szFilename, szKey);
-    if(!fChlDsRemoveHT(pDirInfo->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1))
-    {
-        // See if file is present in the dup within list
-        if(!(RemoveFromDupWithinList(pFileInfo, &pDirInfo->stDupFilesInTree)))
-        {
-            logerr(L"Failed to remove file from hashtable/list: %s", pFileInfo->szFilename);
-            fRetVal = FALSE;
-            goto done;
-        }
-    }
-    --(pDirInfo->nFiles);
-
-    WCHAR pszFilepath[MAX_PATH];
-    loginfo(L"Deleting file = %s", pszFilepath);
-    if(PathCombine(pszFilepath, pFileInfo->szPath, pFileInfo->szFilename) == NULL)
-    {
-        logerr(L"PathCombine() failed for %s + %s", pFileInfo->szPath, pFileInfo->szFilename);
-        fRetVal = FALSE;
-        goto done;
-    }
-
-    if(!DeleteFile(pszFilepath))
-    {
-        logerr(L"DeleteFile() failed.");
-        fRetVal = FALSE;
-    }
-
-done:
-    return fRetVal;
-}
-
-void ClearFilesDupFlag(_In_ PDIRINFO pDirInfo)
+void ClearFilesDupFlag_NoHash(_In_ PDIRINFO pDirInfo)
 {
     SB_ASSERT(pDirInfo);
-
     if(pDirInfo->nFiles > 0)
     {
         CHL_HT_ITERATOR itr;
@@ -435,10 +408,72 @@ void ClearFilesDupFlag(_In_ PDIRINFO pDirInfo)
     }
 }
 
+static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
+{
+    BOOL fRetVal = TRUE;
+
+    WCHAR pszFilepath[MAX_PATH];
+    loginfo(L"Deleting file = %s", pszFilepath);
+    if(PathCombine(pszFilepath, pFileInfo->szPath, pFileInfo->szFilename) == NULL)
+    {
+        logerr(L"PathCombine() failed for %s + %s", pFileInfo->szPath, pFileInfo->szFilename);
+        fRetVal = FALSE;
+        goto done;
+    }
+
+    if(!DeleteFile(pszFilepath))
+    {
+        logerr(L"DeleteFile() failed.");
+        fRetVal = FALSE;
+    }
+
+    // Remove from file list
+    // The hashtable supports only char* keys
+    char szKey[MAX_PATH];
+    _ConvertToAscii(pFileInfo->szFilename, szKey);
+    if(!fChlDsRemoveHT(pDirInfo->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1))
+    {
+        // See if file is present in the dup within list
+        if(!(RemoveFromDupWithinList(pFileInfo, &pDirInfo->stDupFilesInTree)))
+        {
+            logerr(L"Failed to remove file from hashtable/list: %s", pFileInfo->szFilename);
+            fRetVal = FALSE;
+            goto done;
+        }
+    }
+
+    --(pDirInfo->nFiles);
+
+done:
+    return fRetVal;
+}
+
+static BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDeleteFrom, _In_opt_ PDIRINFO pUpdateDir)
+{
+    if(pUpdateDir)
+    {
+        char szKey[MAX_PATH];
+        PFILEINFO pFileToUpdate;
+
+        // Find this file in the other directory and update that file info
+        // to say that it is not a duplicate any more.
+        _ConvertToAscii(pFileToDelete->szFilename, szKey);
+        BOOL fFound = fChlDsFindHT(pUpdateDir->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1,
+            &pFileToUpdate, NULL);
+    
+        // Must find in the other dir also.
+        SB_ASSERT(fFound);
+        ClearDuplicateAttr(pFileToUpdate);
+    }
+
+    // Now, delete file from the specified dir and from file lists
+    return _DeleteFile(pDeleteFrom, pFileToDelete);
+}
+
 // Inplace delete of files in a directory. This deletes duplicate files from
 // the pDirDeleteFrom directory and removes the duplicate flag of the deleted
 // files in the pDirToUpdate directory.
-BOOL DeleteDupFilesInDir(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdate)
+BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdate)
 {
     SB_ASSERT(pDirDeleteFrom);
 
@@ -465,22 +500,7 @@ BOOL DeleteDupFilesInDir(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdat
         // this logic with previous pointer.
         if(pPrevDupFileInfo)
         {
-            if(pDirToUpdate)
-            {
-                // Find this file in the other directory and update that file info
-                // to say that it is not a duplicate any more.
-                char szKey[MAX_PATH];
-                PFILEINFO pFileToUpdate;
-
-                _ConvertToAscii(pPrevDupFileInfo->szFilename, szKey);
-                BOOL fFound = fChlDsFindHT(pDirToUpdate->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1,
-                                &pFileToUpdate, NULL);
-                SB_ASSERT(fFound);    // Must find in the other dir also.
-                ClearDuplicateAttr(pFileToUpdate);
-            }
-
-            // Now, delete file from the specified dir and from file lists
-            _DeleteFile(pDirDeleteFrom, pPrevDupFileInfo);
+            _DeleteFileUpdateDir(pPrevDupFileInfo, pDirDeleteFrom, pDirToUpdate);
             pPrevDupFileInfo = NULL;
         }
 
@@ -492,7 +512,7 @@ BOOL DeleteDupFilesInDir(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdat
 
     if(pPrevDupFileInfo)
     {
-        _DeleteFile(pDirDeleteFrom, pPrevDupFileInfo);
+        _DeleteFileUpdateDir(pPrevDupFileInfo, pDirDeleteFrom, pDirToUpdate);
         pPrevDupFileInfo = NULL;
     }
 
@@ -506,15 +526,14 @@ error_return:
 // from the pDirDeleteFrom directory and update the other directory files'. The files to
 // be deleted are specified in a list of strings that are the file names.
 // ** Assuming that paszFileNamesToDelete is an array of MAX_PATH strings.
-BOOL DeleteFilesInDir(
+BOOL DeleteFilesInDir_NoHash(
     _In_ PDIRINFO pDirDeleteFrom, 
     _In_ PCWSTR paszFileNamesToDelete, 
     _In_ int nFileNames, 
-    _In_ PDIRINFO pDirToUpdate)
+    _In_opt_ PDIRINFO pDirToUpdate)
 {
     SB_ASSERT(pDirDeleteFrom);
     SB_ASSERT(paszFileNamesToDelete);
-    SB_ASSERT(pDirToUpdate);
     SB_ASSERT(nFileNames >= 0);
 
     char szKey[MAX_PATH];
@@ -530,20 +549,7 @@ BOOL DeleteFilesInDir(
         nKeySize = strnlen_s(szKey, ARRAYSIZE(szKey)) + 1;
         if(fChlDsFindHT(pDirDeleteFrom->phtFiles, szKey, nKeySize, &pFileToDelete, NULL))
         {
-            // File found in from-dir
-            // If file is present in to-update-dir, then clear it's duplicate flag
-            // TODO: Better logic; don't check this inside the loop, every iteration
-            if(pDirToUpdate)
-            {
-                if(fChlDsFindHT(pDirToUpdate->phtFiles, szKey, nKeySize, &pFileToUpdate, NULL))
-                {
-                    // Don't care what kind of duplicacy it was, now there will be no duplicate.
-                    ClearDuplicateAttr(pFileToUpdate);
-                }
-            }
-
-            // Delete file from file system and remove from hashtable
-            _DeleteFile(pDirDeleteFrom, pFileToDelete);
+            _DeleteFileUpdateDir(pFileToDelete, pDirDeleteFrom, pDirToUpdate);
         }
         else
         {
@@ -560,7 +566,7 @@ BOOL DeleteFilesInDir(
 
 // Print the dir tree in BFS order, two blank lines separating
 // file listing of each directory
-void PrintDirTree(_In_ PDIRINFO pRootDir)
+void PrintDirTree_NoHash(_In_ PDIRINFO pRootDir)
 {
     PrintFilesInDir(pRootDir);
     wprintf(L"\n");
@@ -582,7 +588,7 @@ void PrintDirTree(_In_ PDIRINFO pRootDir)
 }
 
 // Print files in the folder, one on each line. End on a blank line.
-void PrintFilesInDir(_In_ PDIRINFO pDirInfo)
+void PrintFilesInDir_NoHash(_In_ PDIRINFO pDirInfo)
 {
     SB_ASSERT(pDirInfo);
 
@@ -607,26 +613,6 @@ void PrintFilesInDir(_In_ PDIRINFO pDirInfo)
     }
 
     return;
-}
-
-// Temp function to convert. Assume safe null-terminated strings
-// with appropriate sized buffers allocated.
-static void _ConvertToAscii(_In_ PCWSTR pwsz, _Out_ char* psz)
-{
-    size_t nOrig = wcslen(pwsz) + 1;
-    wcstombs(psz, pwsz, nOrig);
-}
-
-static BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars)
-{
-    for(int i = 0; i < ARRAYSIZE(g_apszBannedFilesFolders); ++i)
-    {
-        if(_wcsnicmp(pszFilename, g_apszBannedFilesFolders[i], nMaxChars) == 0)
-        {
-            return TRUE;
-        }
-    }
-    return FALSE;
 }
 
 static BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO pFileInfo)

@@ -9,8 +9,29 @@
 
 #include "FileInfo.h"
 
+static HCRYPTPROV g_hCrypt = NULL;
+
+HRESULT FileInfoInit(_In_ BOOL fComputeHash)
+{
+    HRESULT hr = S_OK;
+    if(fComputeHash && g_hCrypt == NULL)
+    {
+        hr = HashFactoryInit(&g_hCrypt);
+    }
+    return hr;
+}
+
+void FileInfoDestroy()
+{
+    if(g_hCrypt)
+    {
+        HashFactoryDestroy(g_hCrypt);
+        g_hCrypt = NULL;
+    }
+}
+
 // Populate file info for the specified file in the caller specified memory location
-BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ PFILEINFO pFileInfo)
+BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ BOOL fComputeHash, _In_ PFILEINFO pFileInfo)
 {
     SB_ASSERT(pszFullpathToFile);
     SB_ASSERT(pFileInfo);
@@ -41,58 +62,62 @@ BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ PFILEINFO pFileInfo)
     {
         pFileInfo->fIsDirectory = TRUE;
     }
-
-    // FILE_FLAG_BACKUP_SEMANTICS specified to get handle to directory also
-    HANDLE hFile = CreateFileW(pszFullpathToFile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-    if(hFile == INVALID_HANDLE_VALUE)
+    
+    WIN32_FILE_ATTRIBUTE_DATA fileAttr;
+    if(!GetFileAttributesEx(pszFullpathToFile, GetFileExInfoStandard, &fileAttr))
     {
-        if(GetLastError() == ERROR_ACCESS_DENIED)
+        logerr(L"Unable to get attributes of file: %s", pszFullpathToFile);
+        goto error_return;
+    }
+
+    if(fileAttr.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+    {
+        pFileInfo->fIsDirectory = TRUE;
+    }
+    else
+    {
+        // Store filesize, last access time in fileinfo
+
+        pFileInfo->llFilesize.HighPart = fileAttr.nFileSizeHigh;
+        pFileInfo->llFilesize.LowPart = fileAttr.nFileSizeLow;
+
+        // Store FILETIME in fileinfo for easy comparison in sorting the listview rows
+        CopyMemory(&pFileInfo->ftModifiedTime, &fileAttr.ftLastWriteTime, sizeof(pFileInfo->ftModifiedTime));
+
+        // Convert filetime to localtime and store in fileinfo
+        SYSTEMTIME stUTC;
+        FileTimeToSystemTime(&pFileInfo->ftModifiedTime, &stUTC);
+        SystemTimeToTzSpecificLocalTime(NULL, &stUTC, &pFileInfo->stModifiedTime);
+
+        if(fComputeHash)
         {
-            logwarn(L"Read access denied to file: %s", pszFullpathToFile);
-            goto done;
+            // Generate hash. Open file handle first...    
+            HANDLE hFile = CreateFileW(pszFullpathToFile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            if(hFile == INVALID_HANDLE_VALUE)
+            {
+                logerr(L"Failed to open file %s", pszFullpathToFile);
+                goto error_return;
+            }
+
+            HRESULT hr = CalculateSHA1(g_hCrypt, hFile, pFileInfo->abHash);
+            CloseHandle(hFile);
+            if(FAILED(hr))
+            {
+                logerr(L"Failed to compute hash (0x%08x) for file: %s", hr, pszFullpathToFile);
+                goto error_return;
+            }
         }
-        logerr(L"Failed to open file %s", pszFullpathToFile);
-        goto error_return;
     }
 
-    if(!(dwAttr & FILE_ATTRIBUTE_DIRECTORY))
-    {
-        // Query file size
-        if(!GetFileSizeEx(hFile, &pFileInfo->llFilesize))
-        {
-            logerr(L"Failed to get size of %s", pszFullpathToFile);
-            goto error_return;
-        }    
-    }
-
-    SYSTEMTIME stUTC;
-    if(!GetFileTime(hFile, NULL, NULL, &pFileInfo->ftModifiedTime))
-    {
-        logerr(L"Failed to get modified datetime of %s", pszFullpathToFile);
-        goto error_return;
-    }
-
-    FileTimeToSystemTime(&pFileInfo->ftModifiedTime, &stUTC);
-    SystemTimeToTzSpecificLocalTime(NULL, &stUTC, &pFileInfo->stModifiedTime);
-
-    CloseHandle(hFile);
-
-done:
     return TRUE;
 
 error_return:
-    if(hFile != NULL && hFile != INVALID_HANDLE_VALUE)
-    {
-        CloseHandle(hFile);
-        hFile = NULL;
-    }
-
     return FALSE;
 }
 
 // Populate file info for the specified file in the callee heap-allocated memory location
 // and return the pointer to this location to the caller.
-BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _Out_ PFILEINFO* ppFileInfo)
+BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ BOOL fComputeHash, _Out_ PFILEINFO* ppFileInfo)
 {
     SB_ASSERT(pszFullpathToFile);
     SB_ASSERT(ppFileInfo);
@@ -104,7 +129,7 @@ BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _Out_ PFILEINFO* ppFileInfo)
         goto error_return;
     }
 
-    if(!CreateFileInfo(pszFullpathToFile, pFileInfo))
+    if(!CreateFileInfo(pszFullpathToFile, fComputeHash, pFileInfo))
     {
         goto error_return;
     }
@@ -124,7 +149,7 @@ error_return:
 
 // Compare two file info structs and say whether they are equal or not
 // also set duplicate flag in the file info structs.
-BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO pRightFile)
+BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO pRightFile, _In_ BOOL fCompareHashes)
 {
     SB_ASSERT(pLeftFile);
     SB_ASSERT(pRightFile);
@@ -193,6 +218,20 @@ BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO
             pLeftFile->bDupInfo &= (~FDUP_DATE_MATCH);
             pRightFile->bDupInfo &= (~FDUP_DATE_MATCH);
         }
+
+        if(fCompareHashes)
+        {
+            if(memcmp(&pLeftFile->abHash, &pRightFile->abHash, sizeof(pLeftFile->abHash)) == 0)
+            {
+                pLeftFile->bDupInfo |= FDUP_HASH_MATCH;
+                pRightFile->bDupInfo |= FDUP_HASH_MATCH;
+            }
+            else
+            {
+                pLeftFile->bDupInfo &= (~FDUP_HASH_MATCH);
+                pRightFile->bDupInfo &= (~FDUP_HASH_MATCH);
+            }
+        }
     }
 
     return IsDuplicateFile(pLeftFile);
@@ -204,9 +243,12 @@ inline BOOL IsDuplicateFile(_In_ const PFILEINFO pFileInfo)
     // 1. Hash matches OR
     // 2. Name and size and date modified matches
     BYTE bDupInfo = pFileInfo->bDupInfo;
-    return (bDupInfo & FDUP_NAME_MATCH) && 
+    return (bDupInfo & FDUP_HASH_MATCH) ||
+           (
+           (bDupInfo & FDUP_NAME_MATCH) && 
            (bDupInfo & FDUP_SIZE_MATCH) &&
-           (bDupInfo & FDUP_DATE_MATCH);
+           (bDupInfo & FDUP_DATE_MATCH)
+           );
 }
 
 void GetDupTypeString(_In_ PFILEINFO pFileInfo, _Inout_z_ PWSTR pszDupType)
@@ -248,4 +290,12 @@ void GetDupTypeString(_In_ PFILEINFO pFileInfo, _Inout_z_ PWSTR pszDupType)
         // Finally, null-terminate
         *pch = 0;
     }   
+}
+
+BOOL CompareFilesByName(_In_ PVOID pLeftFile, _In_ PVOID pRightFile)
+{
+    PFILEINFO pLeft = (PFILEINFO)pLeftFile;
+    PFILEINFO pRight = (PFILEINFO)pRightFile;
+
+    return (wcsnicmp(pLeft->szFilename, pRight->szFilename, ARRAYSIZE(pLeft->szFilename)) == 0);
 }
