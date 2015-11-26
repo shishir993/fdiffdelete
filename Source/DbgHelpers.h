@@ -17,10 +17,10 @@
 
 #ifndef TURNOFF_LOGGING
 
-#define clean_errno() (errno == 0 ? L"None" : _wcserror(errno))
-#define logtrace(M, ...)    fwprintf(stderr, L"[TRACE] %s(): " M L"\n", __FUNCTIONW__, ##__VA_ARGS__)
-#define logerr(M, ...)      fwprintf(stderr, L"[ERROR] %s(): " M L"(errno: %s, LastError: %u)\n", __FUNCTIONW__, ##__VA_ARGS__, clean_errno(), GetLastError())
-#define logwarn(M, ...)     fwprintf(stderr, L"[WARN]  %s(): " M L"\n", __FUNCTIONW__, ##__VA_ARGS__)
+void __logHelper(PCWSTR pszFmt, ...);
+#define logtrace(M, ...)    __logHelper(L"[TRCE]  %s()+%d: " M L"\n", __FUNCTIONW__, __LINE__, ##__VA_ARGS__)
+#define logerr(M, ...)      __logHelper(L"[ERRR]  %s()+%d: " M L"\n", __FUNCTIONW__, __LINE__, ##__VA_ARGS__)
+#define logwarn(M, ...)     __logHelper(L"[WARN]  %s()+%d: " M L"\n", __FUNCTIONW__, __LINE__, ##__VA_ARGS__)
 
 #else
 
@@ -34,8 +34,8 @@
 
 #ifndef TURNOFF_LOGGING
 
-    #define logdbg(M, ...)      fwprintf(stdout, L"[DEBUG] %s(): " M L"\n", __FUNCTIONW__, ##__VA_ARGS__)
-    #define loginfo(M, ...)     fwprintf(stderr, L"[INFO]  %s(): " M L"\n", __FUNCTIONW__, ##__VA_ARGS__)
+    #define logdbg(M, ...)      __logHelper(L"[DBG ]  %s()+%d: " M L"\n", __FUNCTIONW__, __LINE__, ##__VA_ARGS__)
+    #define loginfo(M, ...)     __logHelper(L"[INFO]  %s()+%d: " M L"\n", __FUNCTIONW__, __LINE__, ##__VA_ARGS__)
 
 #else
 

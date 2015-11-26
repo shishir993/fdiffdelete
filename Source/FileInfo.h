@@ -9,7 +9,7 @@
 //
 
 #include "common.h"
-#include "CHelpLibDll.h"
+#include "StringFunctions.h"
 #include "HashFactory.h"
 
 // **

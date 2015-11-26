@@ -10,7 +10,6 @@
 
 #include "Common.h"
 #include "FileInfo.h"
-#include "CHelpLibDll.h"
 #include "DirectoryWalker_Interface.h"
 
 // ** Functions **

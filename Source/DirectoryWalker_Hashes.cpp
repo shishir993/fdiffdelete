@@ -30,7 +30,7 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIR
     // Last parameter is FALSE indicating that the value is not be free'd by the hashtable
     // library upon item removal/hashtable destruction. We will do it ourselves.
     int nEstEntries = fRecursive ? 2048 : 256;
-    if(!fChlDsCreateHT(&pDirInfo->phtFiles, nEstEntries, HT_KEY_STR, HT_VAL_PTR, FALSE))
+    if(FAILED(CHL_DsCreateHT(&pDirInfo->phtFiles, nEstEntries, CHL_KT_STRING, CHL_VT_POINTER, FALSE)))
     {
         logerr(L"Couldn't create hash table for dir: %s", pszFolderpath);
         hr = E_FAIL;
@@ -63,17 +63,17 @@ void DestroyDirInfo_Hash(_In_ PDIRINFO pDirInfo)
         CHL_HT_ITERATOR itr;
         PCHL_LLIST pList;
 
-        if(fChlDsInitIteratorHT(&itr))
+        if(SUCCEEDED(CHL_DsInitIteratorHT(&itr)))
         {
-            while(fChlDsGetNextHT(pDirInfo->phtFiles, &itr, &pszHash, &nKeySize, &pList, NULL))
+            while(SUCCEEDED(CHL_DsGetNextHT(pDirInfo->phtFiles, &itr, &pszHash, &nKeySize, &pList, NULL, TRUE)))
             {
                 SB_ASSERT(pList);
-                fChlDsDestroyLL(pList);
+                CHL_DsDestroyLL(pList);
             }
         }
 
         // Finally, the hash table itself
-        fChlDsDestroyHT(pDirInfo->phtFiles);
+        CHL_DsDestroyHT(pDirInfo->phtFiles);
     }
 
     // Finally finally, the DIRINFO itself
@@ -84,7 +84,7 @@ void DestroyDirInfo_Hash(_In_ PDIRINFO pDirInfo)
 BOOL BuildDirTree_Hash(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
 {
     PCHL_QUEUE pqDirsToTraverse;
-    if(FAILED(CHL_QueueCreate(&pqDirsToTraverse, CHL_VT_PVOID, 20)))
+    if(FAILED(CHL_DsCreateQ(&pqDirsToTraverse, CHL_VT_POINTER, 20)))
     {
         logerr(L"Could not create queue for BFS. Rootpath: %s", pszRootpath);
         goto error_return;
@@ -102,7 +102,7 @@ BOOL BuildDirTree_Hash(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
     }
 
     PDIRINFO pDirToTraverse;
-    while(SUCCEEDED(pqDirsToTraverse->Delete(pqDirsToTraverse, (PVOID*)&pDirToTraverse)))
+    while(SUCCEEDED(pqDirsToTraverse->Delete(pqDirsToTraverse, &pDirToTraverse, NULL, FALSE)))
     {
         loginfo(L"Continuing traversal in dir: %s", pDirToTraverse->pszPath);
         if(!BuildFilesInDir_Hash(pDirToTraverse->pszPath, pqDirsToTraverse, &pFirstDir))
@@ -134,6 +134,10 @@ BOOL BuildFilesInDir_Hash(
     SB_ASSERT(pszFolderpath);
     SB_ASSERT(ppDirInfo);
 
+	WIN32_FIND_DATA findData;
+	HANDLE hFindFile = INVALID_HANDLE_VALUE;
+	PDIRINFO pCurDirInfo = NULL;
+
     if(*ppDirInfo == NULL && FAILED(_Init(pszFolderpath, (pqDirsToTraverse != NULL), ppDirInfo)))
     {
         logerr(L"Init failed for dir: %s", pszFolderpath);
@@ -141,7 +145,7 @@ BOOL BuildFilesInDir_Hash(
     }
 
     // Derefernce just to make it easier to code
-    PDIRINFO pCurDirInfo = *ppDirInfo;
+    pCurDirInfo = *ppDirInfo;
 
     // In order to list all files within the specified directory,
     // path sent to FindFirstFile must end with a "\\*"
@@ -156,8 +160,7 @@ BOOL BuildFilesInDir_Hash(
     }
 
     // Initialize search for files in folder
-    WIN32_FIND_DATA findData;
-    HANDLE hFindFile = FindFirstFile(szSearchpath, &findData);
+    hFindFile = FindFirstFile(szSearchpath, &findData);
     if(hFindFile == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND)
     {
         // No files found under the folder. Just return.
@@ -207,7 +210,7 @@ BOOL BuildFilesInDir_Hash(
                 }
 
                 // Insert pSubDir into the queue so that it will be traversed later
-                if(FAILED(pqDirsToTraverse->Insert(pqDirsToTraverse, &pSubDir, sizeof pSubDir)))
+                if(FAILED(pqDirsToTraverse->Insert(pqDirsToTraverse, pSubDir, sizeof pSubDir)))
                 {
                     logwarn(L"Unable to add sub dir [%s] to traversal queue, cur dir: %s", findData.cFileName, pszFolderpath);
                     free(pFileInfo);
@@ -271,7 +274,7 @@ BOOL CompareDirsAndMarkFiles_Hash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDi
     // If found, pass both to the CompareFileInfoAndMark().
 
     CHL_HT_ITERATOR itrLeft;
-    if(!fChlDsInitIteratorHT(&itrLeft))
+    if(FAILED(CHL_DsInitIteratorHT(&itrLeft)))
     {
         logerr(L"Cannot iterate through file list for dir: %s", pLeftDir->pszPath);
         goto error_return;
@@ -283,22 +286,22 @@ BOOL CompareDirsAndMarkFiles_Hash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDi
     PCHL_LLIST pLeftList, pRightList;
 
     logdbg(L"Comparing dirs: %s and %s", pLeftDir->pszPath, pRightDir->pszPath);
-    while(fChlDsGetNextHT(pLeftDir->phtFiles, &itrLeft, &pszLeftHash, &nLeftKeySize, &pLeftList, NULL))
+    while(SUCCEEDED(CHL_DsGetNextHT(pLeftDir->phtFiles, &itrLeft, &pszLeftHash, &nLeftKeySize, &pLeftList, NULL, TRUE)))
     {
-        PCHL_LLIST pTemp;
-        fChlDsFindHT(pLeftDir->phtFiles, pszLeftHash, nLeftKeySize, &pTemp, NULL);
+        PCHL_LLIST pTemp;	// TODO: why is this here?
+        CHL_DsFindHT(pLeftDir->phtFiles, pszLeftHash, nLeftKeySize, &pTemp, NULL, TRUE);
 
-        if(fChlDsFindHT(pRightDir->phtFiles, pszLeftHash, nLeftKeySize, &pRightList, NULL))
+        if(SUCCEEDED(CHL_DsFindHT(pRightDir->phtFiles, pszLeftHash, nLeftKeySize, &pRightList, NULL, TRUE)))
         {
             // Not supporting duplicate files in same directory scenario
 
             PFILEINFO pLeftFile, pRightFile;
-            if(!fChlDsPeekAtLL(pLeftList, 0, (void**)&pLeftFile))
+            if(FAILED(CHL_DsPeekAtLL(pLeftList, 0, &pLeftFile, NULL, TRUE)))
             {
                 SB_ASSERT(FALSE);
             }
 
-            if(!fChlDsPeekAtLL(pRightList, 0, (void**)&pRightFile))
+            if(FAILED(CHL_DsPeekAtLL(pRightList, 0, &pRightFile, NULL, TRUE)))
             {
                 SB_ASSERT(FALSE);
             }
@@ -357,7 +360,7 @@ void ClearFilesDupFlag_Hash(_In_ PDIRINFO pDirInfo)
     if(pDirInfo->nFiles > 0)
     {
         CHL_HT_ITERATOR itr;
-        if(!fChlDsInitIteratorHT(&itr))
+        if(FAILED(CHL_DsInitIteratorHT(&itr)))
         {
             logerr(L"Cannot iterate through file list for dir: %s", pDirInfo->pszPath);
         }
@@ -365,13 +368,13 @@ void ClearFilesDupFlag_Hash(_In_ PDIRINFO pDirInfo)
         {
             char* pszKey;
             PCHL_LLIST pList;
-            while(fChlDsGetNextHT(pDirInfo->phtFiles, &itr, &pszKey, NULL, &pList, NULL))
+            while(SUCCEEDED(CHL_DsGetNextHT(pDirInfo->phtFiles, &itr, &pszKey, NULL, &pList, NULL, TRUE)))
             {
                 // Foreach file in the linked list...
                 PFILEINFO pFileInfo;
                 for(int i = 0; i < pList->nCurNodes; ++i)
                 {
-                    if(!fChlDsPeekAtLL(pList, i, (void**)&pFileInfo))
+                    if(FAILED(CHL_DsPeekAtLL(pList, i, &pFileInfo, NULL, TRUE)))
                     {
                         logerr(L"Cannot get item %d for hash string %S", i, pszKey);
                         continue;
@@ -399,7 +402,7 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
     }
 
     CHL_HT_ITERATOR itr;
-    if(!fChlDsInitIteratorHT(&itr))
+    if(FAILED(CHL_DsInitIteratorHT(&itr)))
     {
         goto error_return;
     }
@@ -407,7 +410,7 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
     char* pszKey;
     char* pszPreviousKey = NULL;
     PCHL_LLIST pList = NULL;
-    while(fChlDsGetNextHT(pDirDeleteFrom->phtFiles, &itr, &pszKey, NULL, &pList, NULL))
+    while(SUCCEEDED(CHL_DsGetNextHT(pDirDeleteFrom->phtFiles, &itr, &pszKey, NULL, &pList, NULL, TRUE)))
     {
         if(pszPreviousKey)
         {
@@ -418,17 +421,17 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
                 PCHL_LLIST pRightList;
                 PFILEINFO pFileToUpdate;
 
-                BOOL fFound = fChlDsFindHT(pDirToUpdate->phtFiles, pszPreviousKey, strnlen_s(pszPreviousKey, MAX_PATH) + 1,
-                                &pRightList, NULL);
+                BOOL fFound = SUCCEEDED(CHL_DsFindHT(pDirToUpdate->phtFiles, pszPreviousKey, strnlen_s(pszPreviousKey, MAX_PATH) + 1,
+                                &pRightList, NULL, TRUE));
                 SB_ASSERT(fFound);    // Must find in the other dir also.
                 
-                fFound = fChlDsPeekAtLL(pRightList, 0, (void**)&pFileToUpdate);
+                fFound = SUCCEEDED(CHL_DsPeekAtLL(pRightList, 0, &pFileToUpdate, NULL, TRUE));
                 SB_ASSERT(fFound);
 
                 ClearDuplicateAttr(pFileToUpdate);
             }
 
-            if(!fChlDsRemoveHT(pDirDeleteFrom->phtFiles, pszPreviousKey, STRLEN_SHA1))
+            if(FAILED(CHL_DsRemoveHT(pDirDeleteFrom->phtFiles, pszPreviousKey, STRLEN_SHA1)))
             {
                 logerr(L"Cannot remove key %s from hashtable", pszPreviousKey);
                 SB_ASSERT(FALSE);
@@ -440,7 +443,7 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
         PFILEINFO pFileInfo;
         for(int i = 0; i < pList->nCurNodes; ++i)
         {
-            if(!fChlDsPeekAtLL(pList, i, (void**)&pFileInfo))
+            if(FAILED(CHL_DsPeekAtLL(pList, i, &pFileInfo, NULL, TRUE)))
             {
                 logerr(L"Cannot get item %d for hash string %S", i, pszKey);
                 continue;
@@ -451,7 +454,7 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
                 _DeleteFile(pDirDeleteFrom, pFileInfo);
 
                 // Linked list frees up memory when third param is NULL
-                if(!fChlDsRemoveAtLL(pList, i, NULL))
+                if(FAILED(CHL_DsRemoveAtLL(pList, i, NULL, NULL, TRUE)))
                 {
                     logerr(L"Cannot remove file %s from linked list", pFileInfo->szFilename);
                 }
@@ -466,7 +469,7 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
 
         if(pList->nCurNodes == 0)
         {
-            fChlDsDestroyLL(pList);
+            CHL_DsDestroyLL(pList);
             pszPreviousKey = pszKey;
         }
     }
@@ -480,17 +483,17 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
             PCHL_LLIST pRightList;
             PFILEINFO pFileToUpdate;
 
-            BOOL fFound = fChlDsFindHT(pDirToUpdate->phtFiles, pszPreviousKey, strnlen_s(pszPreviousKey, MAX_PATH) + 1,
-                            &pRightList, NULL);
+            BOOL fFound = SUCCEEDED(CHL_DsFindHT(pDirToUpdate->phtFiles, pszPreviousKey, strnlen_s(pszPreviousKey, MAX_PATH) + 1,
+                            &pRightList, NULL, TRUE));
             SB_ASSERT(fFound);    // Must find in the other dir also.
                 
-            fFound = fChlDsPeekAtLL(pRightList, 0, (void**)&pFileToUpdate);
+			fFound = SUCCEEDED(CHL_DsPeekAtLL(pRightList, 0, &pFileToUpdate, NULL, TRUE));
             SB_ASSERT(fFound);
 
             ClearDuplicateAttr(pFileToUpdate);
         }
 
-        if(!fChlDsRemoveHT(pDirDeleteFrom->phtFiles, pszPreviousKey, STRLEN_SHA1))
+        if(FAILED(CHL_DsRemoveHT(pDirDeleteFrom->phtFiles, pszPreviousKey, STRLEN_SHA1)))
         {
             logerr(L"Cannot remove key %s from hashtable", pszPreviousKey);
             SB_ASSERT(FALSE);
@@ -521,7 +524,7 @@ BOOL DeleteFilesInDir_Hash(
     char szKey[STRLEN_SHA1];
     int nKeySize;
     PFILEINFO pFileToDelete;
-    PFILEINFO pFileToUpdate;
+    //PFILEINFO pFileToUpdate;
 
     int index = 0;
     loginfo(L"Deleting %d files from %s", nFiles, pDirDeleteFrom->pszPath);
@@ -533,10 +536,10 @@ BOOL DeleteFilesInDir_Hash(
         nKeySize = strnlen_s(szKey, ARRAYSIZE(szKey)) + 1;
 
         PCHL_LLIST pLeftList;
-        if(fChlDsFindHT(pDirDeleteFrom->phtFiles, szKey, nKeySize, &pLeftList, NULL))
+        if(SUCCEEDED(CHL_DsFindHT(pDirDeleteFrom->phtFiles, szKey, nKeySize, &pLeftList, NULL, TRUE)))
         {
             // Find the file in the linked list
-            if(!fChlDsFindLL(pLeftList, pFileToDelete, CompareFilesByName, NULL))
+            if(FAILED(CHL_DsFindLL(pLeftList, pFileToDelete, CompareFilesByName)))
             {
                 logerr(L"File to delete %s not found under hash string: %S", pFileToDelete->szFilename, szKey);
                 SB_ASSERT(FALSE);
@@ -549,13 +552,13 @@ BOOL DeleteFilesInDir_Hash(
                 if(pDirToUpdate)
                 {
                     PCHL_LLIST pRightList;
-                    if(fChlDsFindHT(pDirToUpdate->phtFiles, szKey, nKeySize, &pRightList, NULL))
+                    if(SUCCEEDED(CHL_DsFindHT(pDirToUpdate->phtFiles, szKey, nKeySize, &pRightList, NULL, TRUE)))
                     {
                         // Find the file in the linked list
-                        if(fChlDsFindLL(pRightList, pFileToDelete, CompareFilesByName, (void**)&pFileToUpdate))
+                        if(SUCCEEDED(CHL_DsFindLL(pRightList, pFileToDelete, CompareFilesByName)))
                         {
                             // Don't care what kind of duplicacy it was, now there will be no duplicate.
-                            ClearDuplicateAttr(pFileToUpdate);
+                            ClearDuplicateAttr(pFileToDelete);
                         }
                     }
                 }
@@ -568,8 +571,8 @@ BOOL DeleteFilesInDir_Hash(
 
                 if(pLeftList->nCurNodes == 0)
                 {
-                    fChlDsDestroyLL(pLeftList);
-                    fChlDsRemoveHT(pDirDeleteFrom->phtFiles, szKey, nKeySize);
+                    CHL_DsDestroyLL(pLeftList);
+                    CHL_DsRemoveHT(pDirDeleteFrom->phtFiles, szKey, nKeySize);
                 }
             }
         }
@@ -599,9 +602,9 @@ void PrintFilesInDir_Hash(_In_ PDIRINFO pDirInfo)
     SB_ASSERT(pDirInfo);
 
     CHL_HT_ITERATOR itr;
-    if(!fChlDsInitIteratorHT(&itr))
+    if(FAILED(CHL_DsInitIteratorHT(&itr)))
     {
-        logerr(L"fChlDsInitIteratorHT() failed.");
+        logerr(L"CHL_DsInitIteratorHT() failed.");
         return;
     }
 
@@ -609,13 +612,13 @@ void PrintFilesInDir_Hash(_In_ PDIRINFO pDirInfo)
 
     char* pszKey = NULL;
     PCHL_LLIST pList = NULL;
-    while(fChlDsGetNextHT(pDirInfo->phtFiles, &itr, &pszKey, NULL, &pList, NULL))
+    while(SUCCEEDED(CHL_DsGetNextHT(pDirInfo->phtFiles, &itr, &pszKey, NULL, &pList, NULL, TRUE)))
     {
         // Foreach file in the linked list...
         PFILEINFO pFileInfo;
         for(int i = 0; i < pList->nCurNodes; ++i)
         {
-            if(!fChlDsPeekAtLL(pList, i, (void**)&pFileInfo))
+            if(FAILED(CHL_DsPeekAtLL(pList, i, &pFileInfo, NULL, TRUE)))
             {
                 logerr(L"Cannot get item %d for hash string %S", i, pszKey);
                 continue;
@@ -639,27 +642,27 @@ static BOOL InsertIntoFileList(_In_ PDIRINFO pDirInfo, _In_opt_ PCWSTR pszKey, _
     HashValueToString(pFile->abHash, szHash);
 
     PCHL_LLIST pList = NULL;
-    if(!fChlDsFindHT(pDirInfo->phtFiles, szHash, STRLEN_SHA1, &pList, NULL))
+    if(FAILED(CHL_DsFindHT(pDirInfo->phtFiles, szHash, STRLEN_SHA1, &pList, NULL, FALSE)))
     {
         // There was no prior file with the same hash value, so create a new linked list
         // for this hash value to store all files which have same hash value.
-        if(!fChlDsCreateLL(&pList, LL_VAL_PTR, 5))
+        if(FAILED(CHL_DsCreateLL(&pList, CHL_VT_POINTER, 5)))
         {
             logerr(L"Cannot create linked list for PFILEINFO storage in hashtable.");
             goto error_return;
         }
 
         // Insert hash value into table
-        if(!fChlDsInsertHT(pDirInfo->phtFiles, szHash, ARRAYSIZE(szHash), pList, sizeof pList))
+        if(FAILED(CHL_DsInsertHT(pDirInfo->phtFiles, szHash, ARRAYSIZE(szHash), pList, sizeof pList)))
         {
             logerr(L"Cannot insert linked list for PFILEINFO storage in hashtable.");
-            fChlDsDestroyLL(pList);
+            CHL_DsDestroyLL(pList);
             goto error_return;
         }
     }
         
     SB_ASSERT(pFile);
-    if(!fChlDsInsertLL(pList, &pFile, sizeof pFile))
+    if(FAILED(CHL_DsInsertLL(pList, pFile, sizeof pFile)))
     {
         logerr(L"Cannot insert into linked list: %s", pszKey);
         goto error_return;

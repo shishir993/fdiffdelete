@@ -39,13 +39,15 @@ BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ BOOL fComputeHash, _In_ 
     ZeroMemory(pFileInfo, sizeof(*pFileInfo));
 
     // Copy file/dir name over to the FILEINFO struct
-    // TODO: Temporary work around of casting since the callee doesn't take a PCWSTR
-    WCHAR* pszFilename = pszChlSzGetFilenameFromPath((WCHAR*)(void*)pszFullpathToFile, wcslen(pszFullpathToFile));
-    WCHAR pch = *pszFilename;
-    *pszFilename = 0;
-    wcscpy_s(pFileInfo->szPath, pszFullpathToFile);
-
-    *pszFilename = pch;
+    PCWSTR pszFilename = CHL_SzGetFilenameFromPath(pszFullpathToFile, wcslen(pszFullpathToFile));
+    int nCharsInRoot = 0;
+    for (const WCHAR* pch = pszFullpathToFile; pch != pszFilename; ++pch, ++nCharsInRoot)
+        ;
+    
+    // Copy folder path first (we've calculate the length to copy)
+    wcsncpy_s(pFileInfo->szPath, ARRAYSIZE(pFileInfo->szPath), pszFullpathToFile, nCharsInRoot);
+    
+    // Now copy the filename
     wcscpy_s(pFileInfo->szFilename, ARRAYSIZE(pFileInfo->szFilename), pszFilename);
 
     // Check if file is a directory

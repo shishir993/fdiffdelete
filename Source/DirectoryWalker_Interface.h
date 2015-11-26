@@ -10,7 +10,6 @@
 
 #include "Common.h"
 #include "FileInfo.h"
-#include "CHelpLibDll.h"
 
 // Structure to hold the files that have same name within
 // the same directory tree. This is required because the hashtable

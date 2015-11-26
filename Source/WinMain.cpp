@@ -16,6 +16,8 @@
 
 HINSTANCE g_hMainInstance;
 
+HANDLE g_hStdOut = NULL;
+
 static int iConInHandle = -1;
 static int iConOutHandle = -1;
 static int iConErrHandle = -1;
@@ -58,17 +60,17 @@ static BOOL CreateConsoleWindow()
         {
             // Thanks to: http://dslweb.nwnexus.com/~ast/dload/guicon.htm and MSDN
             FILE *fp = NULL;
-            HANDLE hInputHandle = GetStdHandle(STD_INPUT_HANDLE);
+            g_hStdOut = GetStdHandle(STD_INPUT_HANDLE);
             HANDLE hOutputHandle = GetStdHandle(STD_OUTPUT_HANDLE);
             HANDLE hErrorHandle = GetStdHandle(STD_ERROR_HANDLE);
 
-            if(hInputHandle == INVALID_HANDLE_VALUE || hOutputHandle == INVALID_HANDLE_VALUE || 
+            if(g_hStdOut == INVALID_HANDLE_VALUE || hOutputHandle == INVALID_HANDLE_VALUE ||
                 hErrorHandle == INVALID_HANDLE_VALUE)
             {
                 __leave;
             }
 
-            if( (iConInHandle = _open_osfhandle((intptr_t)hInputHandle, _O_RDONLY|_O_TEXT)) == -1 )
+            if( (iConInHandle = _open_osfhandle((intptr_t)g_hStdOut, _O_RDONLY|_O_TEXT)) == -1 )
                 __leave;
 
             fp = _fdopen( iConInHandle, "r" );
@@ -93,11 +95,11 @@ static BOOL CreateConsoleWindow()
     {
         if(fError)
         {
-            if(iConInHandle != -1) { _close(iConInHandle); iConInHandle = -1; }
-            if(iConOutHandle != -1) { _close(iConOutHandle); iConOutHandle = -1; }
-            if(iConErrHandle != -1) { _close(iConErrHandle); iConErrHandle = -1; }
-            FreeConsole();
-        }
+			if (iConInHandle != -1) { _close(iConInHandle); iConInHandle = -1; }
+			if (iConOutHandle != -1) { _close(iConOutHandle); iConOutHandle = -1; }
+			if (iConErrHandle != -1) { _close(iConErrHandle); iConErrHandle = -1; }
+			FreeConsole();
+		}
     }
 
     return !fError;

@@ -9,7 +9,7 @@
 
 #include "DialogProc.h"
 #include "resource.h"
-#include "CHelpLibDll.h"
+#include "Hashtable.h"
 #include "UIHelpers.h"
 #include "DirectoryWalker_Interface.h"
 
@@ -90,8 +90,8 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
             SendMessage(uiInfo.hLvLeft, LVM_SETEXTENDEDLISTVIEWSTYLE, 0, (LPARAM)LVS_EX_FULLROWSELECT);
             SendMessage(uiInfo.hLvRight, LVM_SETEXTENDEDLISTVIEWSTYLE, 0, (LPARAM)LVS_EX_FULLROWSELECT);
 
-            fChlGuiInitListViewColumns(uiInfo.hLvLeft, aszColumnNames, ARRAYSIZE(aszColumnNames), aiColumnWidthPercent);
-            fChlGuiInitListViewColumns(uiInfo.hLvRight, aszColumnNames, ARRAYSIZE(aszColumnNames), aiColumnWidthPercent);
+			CHL_GuiInitListViewColumns(uiInfo.hLvLeft, aszColumnNames, ARRAYSIZE(aszColumnNames), aiColumnWidthPercent);
+			CHL_GuiInitListViewColumns(uiInfo.hLvRight, aszColumnNames, ARRAYSIZE(aszColumnNames), aiColumnWidthPercent);
 
 			return TRUE;
 		}

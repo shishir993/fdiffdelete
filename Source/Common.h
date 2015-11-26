@@ -14,6 +14,14 @@
 #include <shlwapi.h>
 #include <strsafe.h>
 #include <CommCtrl.h>
+#include <stdarg.h>
+
+#include "StringFunctions.h"
+#include "Queue.h"
+#include "HashTable.h"
+#include "General.h"
+#include "GuiFunctions.h"
+
 #include "Assert.h"
 #include "DbgHelpers.h"
 

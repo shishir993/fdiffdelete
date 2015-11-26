@@ -9,7 +9,6 @@
 
 #include "HashFactory.h"
 #include <WinCrypt.h>
-#include "CHelpLibDll.h"
 
 HRESULT HashFactoryInit(_Out_ HCRYPTPROV *phCrypt)
 {
@@ -50,7 +49,7 @@ HRESULT CalculateSHA1(_In_ HCRYPTPROV hCrypt, _In_ HANDLE hFile, _Out_bytecap_c_
     if(CryptCreateHash(hCrypt, CALG_SHA1, NULL, 0, &hHash))
     {
         HANDLE hMapObj, hMapView;
-        if(fChlGnCreateMemMapOfFile(hFile, PAGE_READONLY, &hMapObj, &hMapView))
+        if(SUCCEEDED(CHL_GnCreateMemMapOfFile(hFile, PAGE_READONLY, &hMapObj, &hMapView)))
         {
             ULARGE_INTEGER ullFileSize;
             ullFileSize.LowPart = GetFileSize(hFile, &ullFileSize.HighPart);
@@ -107,7 +106,7 @@ void HashValueToString(_In_bytecount_c_(HASHLEN_SHA1) PBYTE pbHash, _Inout_z_ PS
 {
     for(int i = 0; i < HASHLEN_SHA1; ++i)
     {
-        sprintf(pszHashValue + (i<<1), "%02x", pbHash[i]);
+        sprintf_s(pszHashValue + (i<<1), STRLEN_SHA1 - (i<<1), "%02x", pbHash[i]);
     }
     pszHashValue[STRLEN_SHA1-1] = 0;
 }

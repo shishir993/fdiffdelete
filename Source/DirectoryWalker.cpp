@@ -20,7 +20,6 @@
 static BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO pFileInfo);
 static int FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _In_ int iStartIndex);
 static BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES_WITHIN pDupWithinToSearch);
-static BOOL InsertIntoFileList(_In_ PDIRINFO pDirInfo, _In_opt_ PCWSTR pszKey, _In_ PFILEINFO pFile);
 static BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir);
 
 static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo);
@@ -39,7 +38,7 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIR
     ZeroMemory(pDirInfo, sizeof(*pDirInfo));
     wcscpy_s(pDirInfo->pszPath, ARRAYSIZE(pDirInfo->pszPath), pszFolderpath);
     int nEstEntries = fRecursive ? 2048 : 256;
-    if(!fChlDsCreateHT(&pDirInfo->phtFiles, nEstEntries, HT_KEY_STR, HT_VAL_PTR, TRUE))
+    if(FAILED(CHL_DsCreateHT(&pDirInfo->phtFiles, nEstEntries, CHL_KT_STRING, CHL_VT_POINTER, TRUE)))
     {
         logerr(L"Couldn't create hash table for dir: %s", pszFolderpath);
         hr = E_FAIL;
@@ -73,7 +72,7 @@ void DestroyDirInfo_NoHash(_In_ PDIRINFO pDirInfo)
 
     if(pDirInfo->phtFiles != NULL)
     {
-        fChlDsDestroyHT(pDirInfo->phtFiles);
+        CHL_DsDestroyHT(pDirInfo->phtFiles);
     }
 
     // Free each FILEINFO stored in the dup within list
@@ -99,7 +98,7 @@ void DestroyDirInfo_NoHash(_In_ PDIRINFO pDirInfo)
 BOOL BuildDirTree_NoHash(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
 {
     PCHL_QUEUE pqDirsToTraverse;
-    if(FAILED(CHL_QueueCreate(&pqDirsToTraverse, CHL_VT_PVOID, 20)))
+    if(FAILED(CHL_DsCreateQ(&pqDirsToTraverse, CHL_VT_POINTER, 20)))
     {
         logerr(L"Could not create queue for BFS. Rootpath: %s", pszRootpath);
         goto error_return;
@@ -117,7 +116,7 @@ BOOL BuildDirTree_NoHash(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
     }
 
     PDIRINFO pDirToTraverse;
-    while(SUCCEEDED(pqDirsToTraverse->Delete(pqDirsToTraverse, (PVOID*)&pDirToTraverse)))
+    while(SUCCEEDED(pqDirsToTraverse->Delete(pqDirsToTraverse, &pDirToTraverse, NULL, FALSE)))
     {
         loginfo(L"Continuing traversal in dir: %s", pDirToTraverse->pszPath);
         if(!BuildFilesInDir_NoHash(pDirToTraverse->pszPath, pqDirsToTraverse, &pFirstDir))
@@ -223,7 +222,7 @@ BOOL BuildFilesInDir_NoHash(
                 }
 
                 // Insert pSubDir into the queue so that it will be traversed later
-                if(FAILED(pqDirsToTraverse->Insert(pqDirsToTraverse, &pSubDir, sizeof pSubDir)))
+                if(FAILED(pqDirsToTraverse->Insert(pqDirsToTraverse, pSubDir, sizeof pSubDir)))
                 {
                     logwarn(L"Unable to add sub dir [%s] to traversal queue, cur dir: %s", findData.cFileName, pszFolderpath);
                     free(pFileInfo);
@@ -248,13 +247,13 @@ BOOL BuildFilesInDir_NoHash(
             // If the current file's name is already inserted, then add it to the
             // dup within list
             BOOL fFileAdded = TRUE;
-            if(fChlDsFindHT(pCurDirInfo->phtFiles, szKey, nSize, NULL, NULL))
+            if(SUCCEEDED(CHL_DsFindHT(pCurDirInfo->phtFiles, szKey, nSize, NULL, NULL, TRUE)))
             {
                 fFileAdded = AddToDupWithinList(&pCurDirInfo->stDupFilesInTree, pFileInfo);
             }
             else
             {
-                fFileAdded = fChlDsInsertHT(pCurDirInfo->phtFiles, szKey, nSize, pFileInfo, sizeof pFileInfo);
+                fFileAdded = SUCCEEDED(CHL_DsInsertHT(pCurDirInfo->phtFiles, szKey, nSize, pFileInfo, sizeof pFileInfo));
             }
 
             if(!fFileAdded)
@@ -311,7 +310,7 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
     // If found, pass both to the CompareFileInfoAndMark().
 
     CHL_HT_ITERATOR itrLeft;
-    if(!fChlDsInitIteratorHT(&itrLeft))
+    if(FAILED(CHL_DsInitIteratorHT(&itrLeft)))
     {
         logerr(L"Cannot iterate through file list for dir: %s", pLeftDir->pszPath);
         goto error_return;
@@ -322,9 +321,9 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
     int nLeftKeySize;
 
     logdbg(L"Comparing dirs: %s and %s", pLeftDir->pszPath, pRightDir->pszPath);
-    while(fChlDsGetNextHT(pLeftDir->phtFiles, &itrLeft, &pszLeftFile, &nLeftKeySize, &pLeftFile, NULL))
+    while(SUCCEEDED(CHL_DsGetNextHT(pLeftDir->phtFiles, &itrLeft, &pszLeftFile, &nLeftKeySize, &pLeftFile, NULL, TRUE)))
     {
-        if(fChlDsFindHT(pRightDir->phtFiles, (void*)pszLeftFile, nLeftKeySize, &pRightFile, NULL))
+        if(SUCCEEDED(CHL_DsFindHT(pRightDir->phtFiles, (void*)pszLeftFile, nLeftKeySize, &pRightFile, NULL, TRUE)))
         {
             // Same file found in right dir, compare and mark as duplicate
             if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
@@ -355,7 +354,7 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
         char szKey[MAX_PATH];
         _ConvertToAscii(pLeftFile->szFilename, szKey);
         nLeftKeySize = strnlen_s(szKey, MAX_PATH) + 1;
-        if(fChlDsFindHT(pRightDir->phtFiles, (void*)szKey, nLeftKeySize, &pRightFile, NULL))
+        if(SUCCEEDED(CHL_DsFindHT(pRightDir->phtFiles, (void*)szKey, nLeftKeySize, &pRightFile, NULL, TRUE)))
         {
             // Same file found in right dir, compare and mark as duplicate
             if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
@@ -391,7 +390,7 @@ void ClearFilesDupFlag_NoHash(_In_ PDIRINFO pDirInfo)
     if(pDirInfo->nFiles > 0)
     {
         CHL_HT_ITERATOR itr;
-        if(!fChlDsInitIteratorHT(&itr))
+        if(FAILED(CHL_DsInitIteratorHT(&itr)))
         {
             logerr(L"Cannot iterate through file list for dir: %s", pDirInfo->pszPath);
         }
@@ -400,7 +399,7 @@ void ClearFilesDupFlag_NoHash(_In_ PDIRINFO pDirInfo)
             char* pszKey;
             PFILEINFO pFileInfo;
             int nKeySize, nValSize;
-            while(fChlDsGetNextHT(pDirInfo->phtFiles, &itr, &pszKey, &nKeySize, &pFileInfo, &nValSize))
+            while(SUCCEEDED(CHL_DsGetNextHT(pDirInfo->phtFiles, &itr, &pszKey, &nKeySize, &pFileInfo, &nValSize, TRUE)))
             {
                 ClearDuplicateAttr(pFileInfo);
             }
@@ -431,7 +430,7 @@ static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
     // The hashtable supports only char* keys
     char szKey[MAX_PATH];
     _ConvertToAscii(pFileInfo->szFilename, szKey);
-    if(!fChlDsRemoveHT(pDirInfo->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1))
+    if(FAILED(CHL_DsRemoveHT(pDirInfo->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1)))
     {
         // See if file is present in the dup within list
         if(!(RemoveFromDupWithinList(pFileInfo, &pDirInfo->stDupFilesInTree)))
@@ -458,8 +457,8 @@ static BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDe
         // Find this file in the other directory and update that file info
         // to say that it is not a duplicate any more.
         _ConvertToAscii(pFileToDelete->szFilename, szKey);
-        BOOL fFound = fChlDsFindHT(pUpdateDir->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1,
-            &pFileToUpdate, NULL);
+        BOOL fFound = SUCCEEDED(CHL_DsFindHT(pUpdateDir->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1,
+            &pFileToUpdate, NULL, TRUE));
     
         // Must find in the other dir also.
         SB_ASSERT(fFound);
@@ -485,7 +484,7 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
     }
 
     CHL_HT_ITERATOR itr;
-    if(!fChlDsInitIteratorHT(&itr))
+    if(FAILED(CHL_DsInitIteratorHT(&itr)))
     {
         goto error_return;
     }
@@ -493,7 +492,7 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
     char* pszFilename = NULL;
     PFILEINFO pFileInfo = NULL;
     PFILEINFO pPrevDupFileInfo = NULL;
-    while(fChlDsGetNextHT(pDirDeleteFrom->phtFiles, &itr, &pszFilename, NULL, &pFileInfo, NULL))
+    while(SUCCEEDED(CHL_DsGetNextHT(pDirDeleteFrom->phtFiles, &itr, &pszFilename, NULL, &pFileInfo, NULL, TRUE)))
     {
         // The hashtable iterator expects the currently found entry
         // not to be removed until we move to the next entry. Hence,
@@ -539,7 +538,7 @@ BOOL DeleteFilesInDir_NoHash(
     char szKey[MAX_PATH];
     int nKeySize;
     PFILEINFO pFileToDelete;
-    PFILEINFO pFileToUpdate;
+    //PFILEINFO pFileToUpdate;
 
     int index = 0;
     loginfo(L"Deleting %d files from %s", nFileNames, pDirDeleteFrom->pszPath);
@@ -547,7 +546,7 @@ BOOL DeleteFilesInDir_NoHash(
     {
         _ConvertToAscii(paszFileNamesToDelete + (index * MAX_PATH), szKey);
         nKeySize = strnlen_s(szKey, ARRAYSIZE(szKey)) + 1;
-        if(fChlDsFindHT(pDirDeleteFrom->phtFiles, szKey, nKeySize, &pFileToDelete, NULL))
+        if(SUCCEEDED(CHL_DsFindHT(pDirDeleteFrom->phtFiles, szKey, nKeySize, &pFileToDelete, NULL, TRUE)))
         {
             _DeleteFileUpdateDir(pFileToDelete, pDirDeleteFrom, pDirToUpdate);
         }
@@ -593,9 +592,9 @@ void PrintFilesInDir_NoHash(_In_ PDIRINFO pDirInfo)
     SB_ASSERT(pDirInfo);
 
     CHL_HT_ITERATOR itr;
-    if(!fChlDsInitIteratorHT(&itr))
+    if(FAILED(CHL_DsInitIteratorHT(&itr)))
     {
-        logerr(L"fChlDsInitIteratorHT() failed.");
+        logerr(L"CHL_DsInitIteratorHT() failed.");
         return;
     }
 
@@ -603,7 +602,7 @@ void PrintFilesInDir_NoHash(_In_ PDIRINFO pDirInfo)
 
     char* pszFilename = NULL;
     PFILEINFO pFileInfo = NULL;
-    while(fChlDsGetNextHT(pDirInfo->phtFiles, &itr, &pszFilename, NULL, &pFileInfo, NULL))
+    while(SUCCEEDED(CHL_DsGetNextHT(pDirInfo->phtFiles, &itr, &pszFilename, NULL, &pFileInfo, NULL, TRUE)))
     {
         wprintf(L"%10u %c %1d %s\n", 
             pFileInfo->llFilesize.LowPart,
@@ -622,7 +621,7 @@ static BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO 
     {
         // Must resize buffer
 
-        if(fChlGnIsOverflowINT(pDupWithin->nCurSize, pDupWithin->nCurSize))
+        if(CHL_GnIsOverflowINT(pDupWithin->nCurSize, pDupWithin->nCurSize))
         {
             logerr(L"Reached limit of int arithmetic for nCurSize = %d!", pDupWithin->nCurSize);
             fContinue = FALSE;
