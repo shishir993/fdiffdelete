@@ -276,7 +276,7 @@ static BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo)
     }
 
     CHL_HT_ITERATOR itr;
-    CHL_DsInitIteratorHT(&itr);
+    CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr);
 
     char* pszKey;
     PFILEINFO pFileInfo;
@@ -291,7 +291,7 @@ static BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo)
     // For each file in the dir, convert relevant attributes into 
     // strings and insert into the list view row by row.
     BOOL fRetVal = TRUE;
-    while(SUCCEEDED(CHL_DsGetNextHT(pDirInfo->phtFiles, &itr, &pszKey, &nKeySize, &pFileInfo, &nValSize, TRUE)))
+    while(SUCCEEDED(CHL_DsGetNextHT(&itr, &pszKey, &nKeySize, &pFileInfo, &nValSize, TRUE)))
     {
         ConstructListViewRow(pFileInfo, apszListRow);
         if(FAILED(CHL_GuiAddListViewRow(hList, apszListRow, ARRAYSIZE(apszListRow), (LPARAM)pFileInfo)))
@@ -338,7 +338,7 @@ BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo, _In_ BOOL fCompar
     }
 
     CHL_HT_ITERATOR itr;
-    CHL_DsInitIteratorHT(&itr);
+    CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr);
 
     WCHAR szDupType[10];    // N,S,D,H (name, size, date, hash)
     WCHAR szDateTime[32];   // 08/13/2014 5:55 PM
@@ -352,7 +352,7 @@ BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo, _In_ BOOL fCompar
 
     char* pszKey;
     PCHL_LLIST pList = NULL;
-    while(SUCCEEDED(CHL_DsGetNextHT(pDirInfo->phtFiles, &itr, &pszKey, NULL, &pList, NULL, TRUE)))
+    while(SUCCEEDED(CHL_DsGetNextHT(&itr, &pszKey, NULL, &pList, NULL, TRUE)))
     {
         // Foreach file in the linked list, insert into list view
         for(int i = 0; i < pList->nCurNodes; ++i)

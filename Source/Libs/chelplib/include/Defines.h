@@ -22,12 +22,6 @@
 #define DllExpImp __declspec( dllimport )
 #endif // CHELPLIB_EXPORTS
 
-// TODO: Is there a defined range for custom HRESULT codes?
-
-// Custom error codes
-#define CHLE_MUTEX_TIMEOUT  17010
-#define CHLE_EMPTY_FILE     17011
-
 #ifndef PCVOID
 typedef PVOID const PCVOID;
 #endif

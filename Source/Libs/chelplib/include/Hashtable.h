@@ -25,22 +25,16 @@ typedef struct _hashTableNode {
     struct _hashTableNode *pnext;
 }HT_NODE;
 
-// Structure that defines the iterator for the hashtable
-// Callers can use this to iterate through the hashtable
-// and get all (key,value) pairs one-by-one
-typedef struct _hashtableIterator {
-    int opType;
-    int nCurIndex;              // current position in the main bucket
-    HT_NODE *phtCurNodeInList;  // current position in the sibling list
-}CHL_HT_ITERATOR;
+// Foward declare the iterator struct
+struct _hashtableIterator;
 
 // hashtable itself
 typedef struct _hashtable {
-    CHL_KEYTYPE keyType;
-    CHL_VALTYPE valType;
-    BOOL fValIsInHeap;
-    HT_NODE *phtNodes;
-    int nTableSize;
+    CHL_KEYTYPE keyType;    // Type information for the hashtable key
+    CHL_VALTYPE valType;    // Type information for the hashtable value
+    BOOL fValIsInHeap;      // Whether value was allocated on heap by client (for CHL_VT_POINTER only)
+    HT_NODE *phtNodes;      // Pointer to hashtable nodes
+    int nTableSize;         // Total number of buckets in the hashtable
 	CRITICAL_SECTION csLock;
 
     // Access methods
@@ -63,10 +57,9 @@ typedef struct _hashtable {
 
     HRESULT (*Remove)(struct _hashtable* phtable, PCVOID pvkey, int iKeySize);
 
-    HRESULT (*InitIterator)(CHL_HT_ITERATOR *pItr);
+    HRESULT (*InitIterator)(struct _hashtable* phtable, struct _hashtableIterator *pItr);
     HRESULT (*GetNext)(
-        struct _hashtable* phtable, 
-        CHL_HT_ITERATOR *pItr, 
+        struct _hashtableIterator *pItr,
         PCVOID pvKey, 
         PINT pkeysize,
         PVOID pvVal, 
@@ -76,6 +69,16 @@ typedef struct _hashtable {
     void (*Dump)(struct _hashtable* phtable);
 
 }CHL_HTABLE, *PCHL_HTABLE;
+
+// Structure that defines the iterator for the hashtable
+// Callers can use this to iterate through the hashtable
+// and get all (key,value) pairs one-by-one
+typedef struct _hashtableIterator {
+    int opType;
+    int nCurIndex;              // current position in the main bucket
+    HT_NODE *phtCurNodeInList;  // current position in the sibling list
+    PCHL_HTABLE pMyHashTable;   // Pointer to the hashtable to work on
+}CHL_HT_ITERATOR;
 
 // -------------------------------------------
 // Functions exported
@@ -98,18 +101,21 @@ DllExpImp HRESULT CHL_DsCreateHT(
     _In_ CHL_VALTYPE valType, 
     _In_opt_ BOOL fValInHeapMem);
 
+// Destroy the hashtable by removing all key-value pairs from the hashtable.
+// The CHL_HTABLE object itself is also destroyed.
+// Params:
+//      phtable: Pointer to the hashtable object returned by CHL_DsCreateHT function.
+//
 DllExpImp HRESULT CHL_DsDestroyHT(_In_ CHL_HTABLE *phtable);
 
 // Inserts a key,value pair into the hash table. If the key already exists, then the value is over-written
 // with the new value. If both the key and value already exist, then nothing is changed in the hash table.
 // Params:
 //      phtable: Pointer to the hashtable object returned by CHL_DsCreateHT function.
-//      pvkey: Pointer to the key.
-//      iKeySize: For strings(ANSI and UNICODE), this the number of characters including terminating NULL.
-//               For other types, it is the size in bytes.
+//      pvkey: Pointer to the key. For primitive types, this is the primitive value casted to a PCVOID.
+//      iKeySize: Size of the key in bytes. For null-terminated strings, zero may be passed.
 //      pvVal: Value to be stored. Please see documentation for details.
-//      iValSize: For strings(ANSI and UNICODE), number of characters including terminating NULL.
-//                For other types, it is the size in bytes.
+//      iValSize: Size of the value in bytes. For null-terminated strings, zero may be passed.
 //
 DllExpImp HRESULT CHL_DsInsertHT(
     _In_ CHL_HTABLE *phtable, 
@@ -118,6 +124,18 @@ DllExpImp HRESULT CHL_DsInsertHT(
     _In_ PCVOID pvVal, 
     _In_ int iValSize);
 
+// Find the specified key in the hash table.
+// Params:
+//      phtable: Pointer to the hashtable object returned by CHL_DsCreateHT function.
+//      pvkey: Pointer to the key. For primitive types, this is the primitive value casted to a PCVOID.
+//      iKeySize: Size of the key in bytes. For null-terminated strings, zero may be passed.
+//      pvVal: Optional. Pointer to a buffer to receive the value, if found.
+//      pvalsize: Optional. Size of the value buffer in bytes. If specified size is insufficient, the function
+//          returns the required size back in this parameter.
+//      fGetPointerOnly: Applies to value of type CHL_VT_USEROBJECT/CHL_VT_STRING/CHL_VT_WSTRING - 
+//          If this is TRUE, function returns a pointer to the stored value in the buffer pvVal.
+//          Otherwise, the full value is copied into the pvVal buffer.
+//
 DllExpImp HRESULT CHL_DsFindHT(
     _In_ CHL_HTABLE *phtable, 
     _In_ PCVOID pvkey, 
@@ -126,11 +144,32 @@ DllExpImp HRESULT CHL_DsFindHT(
     _Inout_opt_ PINT pvalsize,
     _In_opt_ BOOL fGetPointerOnly);
 
+// Deletes the specified key from the hash table.
+// Params:
+//      phtable: Pointer to the hashtable object returned by CHL_DsCreateHT function.
+//      pvkey: Pointer to the key. For primitive types, this is the primitive value casted to a PCVOID.
+//      iKeySize: Size of the key in bytes. For null-terminated strings, zero may be passed.
+//
 DllExpImp HRESULT CHL_DsRemoveHT(_In_ CHL_HTABLE *phtable, _In_ PCVOID pvkey, _In_ int iKeySize);
 
-DllExpImp HRESULT CHL_DsInitIteratorHT(_In_ CHL_HT_ITERATOR *pItr);
+// Initialize the iterator object for use with the specified hashtable.
+// Params:
+//      pItr: Pointer to the iterator object to initialize.
+//      phtable: Pointer to the hashtable object returned by CHL_DsCreateHT function.
+//
+DllExpImp HRESULT CHL_DsInitIteratorHT(_In_ PCHL_HTABLE phtable, _Inout_ CHL_HT_ITERATOR *pItr);
+
+// Get the next element in the hash table using the specified iterator object.
+// Params:
+//      pItr: The iterator object that was initialized by CHL_DsInitIteratorHT.
+//      pvKey: Optional. Pointer to buffer to receive the key of the next item.
+//      pKeySize: Optional. Size of the key buffer in bytes. If specified size is insufficient, the function
+//          returns the required size back in this parameter.
+//      pvVal: Refer documentation of the CHL_DsFindHT() function.
+//      pvalsize: Refer documentation of the CHL_DsFindHT() function.
+//      fGetPointerOnly: Refer documentation of the CHL_DsFindHT() function.
+//
 DllExpImp HRESULT CHL_DsGetNextHT(
-    _In_ CHL_HTABLE *phtable, 
     _In_ CHL_HT_ITERATOR *pItr, 
     _Inout_opt_ PCVOID pvKey, 
     _Inout_opt_ PINT pkeysize,

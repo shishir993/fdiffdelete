@@ -63,9 +63,9 @@ void DestroyDirInfo_Hash(_In_ PDIRINFO pDirInfo)
         CHL_HT_ITERATOR itr;
         PCHL_LLIST pList;
 
-        if(SUCCEEDED(CHL_DsInitIteratorHT(&itr)))
+        if(SUCCEEDED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
         {
-            while(SUCCEEDED(CHL_DsGetNextHT(pDirInfo->phtFiles, &itr, &pszHash, &nKeySize, &pList, NULL, TRUE)))
+            while(SUCCEEDED(CHL_DsGetNextHT(&itr, &pszHash, &nKeySize, &pList, NULL, TRUE)))
             {
                 SB_ASSERT(pList);
                 CHL_DsDestroyLL(pList);
@@ -274,7 +274,7 @@ BOOL CompareDirsAndMarkFiles_Hash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDi
     // If found, pass both to the CompareFileInfoAndMark().
 
     CHL_HT_ITERATOR itrLeft;
-    if(FAILED(CHL_DsInitIteratorHT(&itrLeft)))
+    if(FAILED(CHL_DsInitIteratorHT(pLeftDir->phtFiles, &itrLeft)))
     {
         logerr(L"Cannot iterate through file list for dir: %s", pLeftDir->pszPath);
         goto error_return;
@@ -286,7 +286,7 @@ BOOL CompareDirsAndMarkFiles_Hash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDi
     PCHL_LLIST pLeftList, pRightList;
 
     logdbg(L"Comparing dirs: %s and %s", pLeftDir->pszPath, pRightDir->pszPath);
-    while(SUCCEEDED(CHL_DsGetNextHT(pLeftDir->phtFiles, &itrLeft, &pszLeftHash, &nLeftKeySize, &pLeftList, NULL, TRUE)))
+    while(SUCCEEDED(CHL_DsGetNextHT(&itrLeft, &pszLeftHash, &nLeftKeySize, &pLeftList, NULL, TRUE)))
     {
         PCHL_LLIST pTemp;	// TODO: why is this here?
         CHL_DsFindHT(pLeftDir->phtFiles, pszLeftHash, nLeftKeySize, &pTemp, NULL, TRUE);
@@ -360,7 +360,7 @@ void ClearFilesDupFlag_Hash(_In_ PDIRINFO pDirInfo)
     if(pDirInfo->nFiles > 0)
     {
         CHL_HT_ITERATOR itr;
-        if(FAILED(CHL_DsInitIteratorHT(&itr)))
+        if(FAILED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
         {
             logerr(L"Cannot iterate through file list for dir: %s", pDirInfo->pszPath);
         }
@@ -368,7 +368,7 @@ void ClearFilesDupFlag_Hash(_In_ PDIRINFO pDirInfo)
         {
             char* pszKey;
             PCHL_LLIST pList;
-            while(SUCCEEDED(CHL_DsGetNextHT(pDirInfo->phtFiles, &itr, &pszKey, NULL, &pList, NULL, TRUE)))
+            while(SUCCEEDED(CHL_DsGetNextHT(&itr, &pszKey, NULL, &pList, NULL, TRUE)))
             {
                 // Foreach file in the linked list...
                 PFILEINFO pFileInfo;
@@ -402,7 +402,7 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
     }
 
     CHL_HT_ITERATOR itr;
-    if(FAILED(CHL_DsInitIteratorHT(&itr)))
+    if(FAILED(CHL_DsInitIteratorHT(pDirDeleteFrom->phtFiles, &itr)))
     {
         goto error_return;
     }
@@ -410,7 +410,7 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
     char* pszKey;
     char* pszPreviousKey = NULL;
     PCHL_LLIST pList = NULL;
-    while(SUCCEEDED(CHL_DsGetNextHT(pDirDeleteFrom->phtFiles, &itr, &pszKey, NULL, &pList, NULL, TRUE)))
+    while(SUCCEEDED(CHL_DsGetNextHT(&itr, &pszKey, NULL, &pList, NULL, TRUE)))
     {
         if(pszPreviousKey)
         {
@@ -602,7 +602,7 @@ void PrintFilesInDir_Hash(_In_ PDIRINFO pDirInfo)
     SB_ASSERT(pDirInfo);
 
     CHL_HT_ITERATOR itr;
-    if(FAILED(CHL_DsInitIteratorHT(&itr)))
+    if(FAILED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
     {
         logerr(L"CHL_DsInitIteratorHT() failed.");
         return;
@@ -612,7 +612,7 @@ void PrintFilesInDir_Hash(_In_ PDIRINFO pDirInfo)
 
     char* pszKey = NULL;
     PCHL_LLIST pList = NULL;
-    while(SUCCEEDED(CHL_DsGetNextHT(pDirInfo->phtFiles, &itr, &pszKey, NULL, &pList, NULL, TRUE)))
+    while(SUCCEEDED(CHL_DsGetNextHT(&itr, &pszKey, NULL, &pList, NULL, TRUE)))
     {
         // Foreach file in the linked list...
         PFILEINFO pFileInfo;
