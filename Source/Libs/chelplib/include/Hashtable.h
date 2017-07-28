@@ -1,5 +1,6 @@
-// CHelpLib.h
-// Exported symbols from CHelpLib DLL
+
+// Hashtable.h
+// Hashtable implementation with buckets
 // Shishir Bhat (http://www.shishirbhat.com)
 // History
 //      Unknown history!
@@ -29,35 +30,35 @@ typedef struct _hashTableNode {
 struct _hashtableIterator;
 
 // hashtable itself
-typedef struct _hashtable {
+typedef struct _hashtable CHL_HTABLE, *PCHL_HTABLE;
+struct _hashtable {
     CHL_KEYTYPE keyType;    // Type information for the hashtable key
     CHL_VALTYPE valType;    // Type information for the hashtable value
     BOOL fValIsInHeap;      // Whether value was allocated on heap by client (for CHL_VT_POINTER only)
     HT_NODE *phtNodes;      // Pointer to hashtable nodes
     int nTableSize;         // Total number of buckets in the hashtable
-	CRITICAL_SECTION csLock;
 
     // Access methods
-    HRESULT (*Destroy)(struct _hashtable* phtable);
+    HRESULT (*Destroy)(PCHL_HTABLE phtable);
 
     HRESULT (*Insert)(
-        struct _hashtable* phtable, 
+        PCHL_HTABLE phtable, 
         PCVOID pvkey, 
         int iKeySize, 
         PVOID pvVal, 
         int iValSize);
 
     HRESULT (*Find)(
-        struct _hashtable* phtable, 
+        PCHL_HTABLE phtable, 
         PCVOID pvkey, 
         int iKeySize, 
         PVOID pvVal, 
         PINT pvalsize,
         BOOL fGetPointerOnly);
 
-    HRESULT (*Remove)(struct _hashtable* phtable, PCVOID pvkey, int iKeySize);
+    HRESULT (*Remove)(PCHL_HTABLE phtable, PCVOID pvkey, int iKeySize);
 
-    HRESULT (*InitIterator)(struct _hashtable* phtable, struct _hashtableIterator *pItr);
+    HRESULT (*InitIterator)(PCHL_HTABLE phtable, struct _hashtableIterator *pItr);
     HRESULT (*GetNext)(
         struct _hashtableIterator *pItr,
         PCVOID pvKey, 
@@ -66,9 +67,8 @@ typedef struct _hashtable {
         PINT pvalsize,
         BOOL fGetPointerOnly);
 
-    void (*Dump)(struct _hashtable* phtable);
-
-}CHL_HTABLE, *PCHL_HTABLE;
+    void (*Dump)(PCHL_HTABLE phtable);
+};
 
 // Structure that defines the iterator for the hashtable
 // Callers can use this to iterate through the hashtable
