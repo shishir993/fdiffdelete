@@ -24,7 +24,8 @@ static WCHAR *g_apszBannedFilesFolders[] =
 void _ConvertToAscii(_In_ PCWSTR pwsz, _Out_ char* psz)
 {
     size_t nOrig = wcslen(pwsz) + 1;
-    wcstombs(psz, pwsz, nOrig);
+	size_t nConv;
+    wcstombs_s(&nConv, psz, nOrig, pwsz, nOrig);
 }
 
 BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars)

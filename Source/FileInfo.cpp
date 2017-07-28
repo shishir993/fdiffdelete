@@ -299,5 +299,5 @@ BOOL CompareFilesByName(_In_ PVOID pLeftFile, _In_ PVOID pRightFile)
     PFILEINFO pLeft = (PFILEINFO)pLeftFile;
     PFILEINFO pRight = (PFILEINFO)pRightFile;
 
-    return (wcsnicmp(pLeft->szFilename, pRight->szFilename, ARRAYSIZE(pLeft->szFilename)) == 0);
+    return (_wcsnicmp(pLeft->szFilename, pRight->szFilename, ARRAYSIZE(pLeft->szFilename)) == 0);
 }
