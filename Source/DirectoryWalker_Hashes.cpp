@@ -539,7 +539,7 @@ BOOL DeleteFilesInDir_Hash(
         if(SUCCEEDED(CHL_DsFindHT(pDirDeleteFrom->phtFiles, szKey, nKeySize, &pLeftList, NULL, TRUE)))
         {
             // Find the file in the linked list
-            if(FAILED(CHL_DsFindLL(pLeftList, pFileToDelete, CompareFilesByName)))
+            if(FAILED(CHL_DsFindLL(pLeftList, pFileToDelete, CompareFilesByName, NULL, NULL, TRUE)))
             {
                 logerr(L"File to delete %s not found under hash string: %S", pFileToDelete->szFilename, szKey);
                 SB_ASSERT(FALSE);
@@ -555,7 +555,7 @@ BOOL DeleteFilesInDir_Hash(
                     if(SUCCEEDED(CHL_DsFindHT(pDirToUpdate->phtFiles, szKey, nKeySize, &pRightList, NULL, TRUE)))
                     {
                         // Find the file in the linked list
-                        if(SUCCEEDED(CHL_DsFindLL(pRightList, pFileToDelete, CompareFilesByName)))
+                        if(SUCCEEDED(CHL_DsFindLL(pRightList, pFileToDelete, CompareFilesByName, NULL, NULL, TRUE)))
                         {
                             // Don't care what kind of duplicacy it was, now there will be no duplicate.
                             ClearDuplicateAttr(pFileToDelete);
