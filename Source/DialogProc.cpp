@@ -193,8 +193,14 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 
                 case IDC_BTN_DEL_LEFT:
                 {
+					int nItemsSel;
                     BOOL fSucceeded = FALSE;
-                    int nItemsSel;
+
+					if (uiInfo.pLeftDirInfo == NULL)
+					{
+						return FALSE;
+					}
+
                     if(uiInfo.pLeftDirInfo->fHashCompare)
                     {
                         PFILEINFO *ppFiles;
@@ -229,8 +235,14 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 
                 case IDC_BTN_DEL_RIGHT:
                 {
+					int nItemsSel;
                     BOOL fSucceeded = FALSE;
-                    int nItemsSel;
+
+					if (uiInfo.pRightDirInfo == NULL)
+					{
+						return FALSE;
+					}
+
                     if(uiInfo.pRightDirInfo->fHashCompare)
                     {
                         PFILEINFO *ppFiles;
