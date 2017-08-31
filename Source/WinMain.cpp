@@ -60,27 +60,27 @@ static BOOL CreateConsoleWindow()
         {
             // Thanks to: http://dslweb.nwnexus.com/~ast/dload/guicon.htm and MSDN
             FILE *fp = NULL;
-            g_hStdOut = GetStdHandle(STD_INPUT_HANDLE);
-            HANDLE hOutputHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+            g_hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+            HANDLE hInputHandle = GetStdHandle(STD_INPUT_HANDLE);
             HANDLE hErrorHandle = GetStdHandle(STD_ERROR_HANDLE);
 
-            if(g_hStdOut == INVALID_HANDLE_VALUE || hOutputHandle == INVALID_HANDLE_VALUE ||
+            if(g_hStdOut == INVALID_HANDLE_VALUE || hInputHandle == INVALID_HANDLE_VALUE ||
                 hErrorHandle == INVALID_HANDLE_VALUE)
             {
                 __leave;
             }
 
-            if( (iConInHandle = _open_osfhandle((intptr_t)g_hStdOut, _O_RDONLY|_O_TEXT)) == -1 )
+            if( (iConOutHandle = _open_osfhandle((intptr_t)g_hStdOut, _O_APPEND|_O_TEXT)) == -1 )
                 __leave;
 
-            fp = _fdopen( iConInHandle, "r" );
-            *stdin = *fp;
+			fp = _fdopen(iConOutHandle, "w+");
+			*stdout = *fp;
 
-            if( (iConOutHandle = _open_osfhandle((intptr_t)hOutputHandle, _O_APPEND|_O_TEXT)) == -1 )
+            if( (iConInHandle = _open_osfhandle((intptr_t)hInputHandle, _O_RDONLY|_O_TEXT)) == -1 )
                 __leave;
 
-            fp = _fdopen( iConOutHandle, "w+" );
-            *stdout = *fp;
+			fp = _fdopen(iConInHandle, "r");
+			*stdin = *fp;
 
             if( (iConErrHandle = _open_osfhandle((intptr_t)hErrorHandle, _O_APPEND|_O_TEXT)) == -1 )
                 __leave;
