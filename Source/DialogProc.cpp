@@ -13,10 +13,11 @@
 #include "UIHelpers.h"
 #include "DirectoryWalker_Interface.h"
 
-#define WM_UPDATE_LEFT      (WM_USER + 1)   // wParam = TRUE/FALSE path stored in FDIFFUI_INFO.szFolderpath* or not, LPARAM = not used.
-#define WM_UPDATE_RIGHT     (WM_USER + 2)   // same as above
-#define WM_BROWSE_LEFT      (WM_USER + 3)
-#define WM_BROWSE_RIGHT     (WM_USER + 4)
+enum {
+	WM_DIFF = WM_USER + 1,
+	WM_BROWSE_LEFT,
+	WM_BROWSE_RIGHT
+};
 
 #define FSPEC_STATE_EMPTY           0
 #define FSPEC_STATE_FILLED          1
@@ -65,7 +66,7 @@ static BOOL UpdateDirInfo(
     _In_ BOOL fRecursive,
     _In_ BOOL fCompareHashes);
 
-static BOOL CheckShowInvalidDirMBox(_In_ HWND hDlg, _In_ PCWSTR pszFolderpath);
+static BOOL CheckInvalidDir(_In_ HWND hDlg, _In_ PCWSTR pszFolderpath);
 static BOOL OnHashCompareToggle(_In_ HWND hDlg, _In_ FDIFFUI_INFO *pUiInfo);
 
 // Function definitions
@@ -123,22 +124,6 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 
 		case WM_COMMAND:
 		{
-            if(wParam == IDOK)
-            {
-                // Check if enter was pressed in either of the edit controls and handle it
-                HWND hFocusedItem = GetFocus();
-                if(hFocusedItem == GetDlgItem(hDlg, IDC_EDIT_LEFT))
-                {
-                    SendMessage(hDlg, WM_UPDATE_LEFT, FALSE, (LPARAM)NULL);
-                }
-                else if(hFocusedItem == GetDlgItem(hDlg, IDC_EDIT_RIGHT))
-                {
-                    SendMessage(hDlg, WM_UPDATE_RIGHT, FALSE, (LPARAM)NULL);
-                }
-
-                return TRUE;
-            }// if(wParam == IDOK)
-
 			// handle commands from child controls
 			switch(LOWORD(wParam))
 			{
@@ -196,39 +181,15 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                     }
                     return TRUE;
 
-                case IDC_BTN_LOAD_LEFT:
-                    if(GetTextFromEditControl(GetDlgItem(hDlg, IDC_EDIT_LEFT), 
-                        uiInfo.szFolderpathLeft, ARRAYSIZE(uiInfo.szFolderpathLeft)))
-                    {
-                        if(uiInfo.szFolderpathLeft[0] != 0)
-                        {
-                            SendMessage(hDlg, WM_UPDATE_LEFT, FALSE, (LPARAM)NULL);
-                        }
-                        else if(SUCCEEDED(GetFolderToOpen(uiInfo.szFolderpathLeft)))
-                        {
-                            // Populate the edit control with this path and send message to update list view
-                            SendMessage(GetDlgItem(hDlg, IDC_EDIT_LEFT), WM_SETTEXT, 0, (LPARAM)uiInfo.szFolderpathLeft);
-                            SendMessage(hDlg, WM_UPDATE_LEFT, TRUE, (LPARAM)NULL);
-                        }
-                    }
-                    return TRUE;
-
-                case IDC_BTN_LOAD_RIGHT:
-                    if(GetTextFromEditControl(GetDlgItem(hDlg, IDC_EDIT_RIGHT), 
-                        uiInfo.szFolderpathRight, ARRAYSIZE(uiInfo.szFolderpathRight)))
-                    {
-                        if(uiInfo.szFolderpathRight[0] != 0)
-                        {
-                            SendMessage(hDlg, WM_UPDATE_RIGHT, FALSE, (LPARAM)NULL);
-                        }
-                        else if(SUCCEEDED(GetFolderToOpen(uiInfo.szFolderpathRight)))
-                        {
-                            // Populate the edit control with this path and send message to update list view
-                            SendMessage(GetDlgItem(hDlg, IDC_EDIT_RIGHT), WM_SETTEXT, 0, (LPARAM)uiInfo.szFolderpathRight);
-                            SendMessage(hDlg, WM_UPDATE_RIGHT, TRUE, (LPARAM)NULL);
-                        }
-                    }
-                    return TRUE;
+				case IDC_BTN_DIFF:
+				{
+					if (uiInfo.szFolderpathLeft[0] != 0 && uiInfo.szFolderpathRight[0] != 0)
+					{
+						SendMessage(hDlg, WM_DIFF, FALSE, (LPARAM)NULL);
+						return TRUE;
+					}
+					return FALSE;
+				}
 
                 case IDC_BTN_DEL_LEFT:
                 {
@@ -347,59 +308,50 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
             switch(((LPNMHDR)lParam)->code)
             {
                 case LVN_COLUMNCLICK:
-                    LPNMLISTVIEW pnmv = (LPNMLISTVIEW)lParam;
-                    if(pnmv->hdr.idFrom == IDC_LIST_LEFT)
-                    {
-                        SB_ASSERT(pnmv->iSubItem >= 0 && pnmv->iSubItem <= ARRAYSIZE(pafnLvCompare));
-                        SendMessage(uiInfo.hLvLeft, LVM_SORTITEMSEX, (WPARAM)uiInfo.hLvLeft, (LPARAM)pafnLvCompare[pnmv->iSubItem]);
-                    }
-                    else if(pnmv->hdr.idFrom == IDC_LIST_RIGHT)
-                    {
-                        SendMessage(uiInfo.hLvRight, LVM_SORTITEMSEX, (WPARAM)uiInfo.hLvRight, (LPARAM)pafnLvCompare[pnmv->iSubItem]);
-                    }
-                    return TRUE;
+				{
+					LPNMLISTVIEW pnmv = (LPNMLISTVIEW)lParam;
+					if (pnmv->hdr.idFrom == IDC_LIST_LEFT)
+					{
+						SB_ASSERT(pnmv->iSubItem >= 0 && pnmv->iSubItem <= ARRAYSIZE(pafnLvCompare));
+						SendMessage(uiInfo.hLvLeft, LVM_SORTITEMSEX, (WPARAM)uiInfo.hLvLeft, (LPARAM)pafnLvCompare[pnmv->iSubItem]);
+					}
+					else if (pnmv->hdr.idFrom == IDC_LIST_RIGHT)
+					{
+						SendMessage(uiInfo.hLvRight, LVM_SORTITEMSEX, (WPARAM)uiInfo.hLvRight, (LPARAM)pafnLvCompare[pnmv->iSubItem]);
+					}
+					return TRUE;
+				}
             }
 
             break;
         }// WM_NOTIFY
 
-        case WM_UPDATE_LEFT:
-        {
-            BOOL fRetVal = TRUE;
-            if(wParam == FALSE)
-            {
-                fRetVal = GetTextFromEditControl(GetDlgItem(hDlg, IDC_EDIT_LEFT), 
-                            uiInfo.szFolderpathLeft, ARRAYSIZE(uiInfo.szFolderpathLeft));
-            }
+		case WM_DIFF:
+		{
+			WCHAR szMessage[128] = {};
+			if (!CheckInvalidDir(hDlg, uiInfo.szFolderpathLeft))
+			{
+				wcscpy_s(szMessage, L"Left folder does not exist or is inaccessible. ");
+			}
+			
+			if (!CheckInvalidDir(hDlg, uiInfo.szFolderpathRight))
+			{
+				wcscat_s(szMessage, L"Right folder does not exist or is inaccessible.");
+			}
 
-            fRetVal &= CheckShowInvalidDirMBox(hDlg, uiInfo.szFolderpathLeft);
-            if(fRetVal)
-            {
-                BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
-                uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
-                UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
-            }
-            return TRUE;
-        }
-
-        case WM_UPDATE_RIGHT:
-        {
-            BOOL fRetVal = TRUE;
-            if(wParam == FALSE)
-            {
-                fRetVal = GetTextFromEditControl(GetDlgItem(hDlg, IDC_EDIT_RIGHT), 
-                            uiInfo.szFolderpathRight, ARRAYSIZE(uiInfo.szFolderpathRight));
-            }
-
-            fRetVal &= CheckShowInvalidDirMBox(hDlg, uiInfo.szFolderpathRight);
-            if(fRetVal)
-            {
-                BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
-                uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
-                UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
-            }
-            return TRUE;
-        }
+			if (szMessage[0] == 0)
+			{
+				BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
+				uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
+				uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
+				UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
+			}
+			else
+			{
+				MessageBox(hDlg, szMessage, L"Error", MB_OK | MB_ICONEXCLAMATION);
+			}
+			return TRUE;
+		}
 
     }// switch(message)
 	return FALSE;
@@ -425,8 +377,6 @@ static BOOL UpdateDirInfo(
 BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive, _In_ BOOL fCompareHashes)
 {
     SB_ASSERT(pUiInfo);
-
-    BOOL fRetVal = TRUE;
 
     if(pUiInfo->iFSpecState_Left == FSPEC_STATE_TOUPDATE)
     {
@@ -463,7 +413,8 @@ BOOL UpdateFileListViews(_In_ FDIFFUI_INFO *pUiInfo, _In_ BOOL fRecursive, _In_ 
             SetWindowText(pUiInfo->hStaticLeft, szStats);
         }
     }
-    else if(pUiInfo->iFSpecState_Right == FSPEC_STATE_TOUPDATE)
+    
+	if(pUiInfo->iFSpecState_Right == FSPEC_STATE_TOUPDATE)
     {
         SB_ASSERT(pUiInfo->szFolderpathRight);
         if(!UpdateDirInfo(pUiInfo->szFolderpathRight, &pUiInfo->pRightDirInfo, fRecursive, fCompareHashes))
@@ -505,24 +456,19 @@ error_return:
     return FALSE;
 }
 
-static BOOL CheckShowInvalidDirMBox(_In_ HWND hDlg, _In_ PCWSTR pszFolderpath)
+static BOOL CheckInvalidDir(_In_ HWND hDlg, _In_ PCWSTR pszFolderpath)
 {
     BOOL fValidFolder = TRUE;
 
-    WCHAR szMsg[MAX_PATH << 1];
     DWORD dwAttr = GetFileAttributes(pszFolderpath);
     if(dwAttr == INVALID_FILE_ATTRIBUTES)
     {
         fValidFolder = FALSE;
         logerr(L"GetFileAttributes() failed for %s", pszFolderpath);
-        swprintf_s(szMsg, ARRAYSIZE(szMsg), L"Directory \"%s\" does not exist or cannot be accessed.", pszFolderpath);
-        MessageBox(hDlg, szMsg, L"Error", MB_OK | MB_ICONEXCLAMATION);
     }
     else if(!(dwAttr & FILE_ATTRIBUTE_DIRECTORY))
     {
         fValidFolder = FALSE;
-        swprintf_s(szMsg, ARRAYSIZE(szMsg), L"\"%s\" is not a directory.", pszFolderpath);
-        MessageBox(hDlg, szMsg, L"Error", MB_OK | MB_ICONEXCLAMATION);
     }
     return fValidFolder;
 }
