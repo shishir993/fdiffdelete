@@ -208,40 +208,32 @@ BOOL BuildFilesInDir_NoHash(
             continue;
         }
 
-        if(pFileInfo->fIsDirectory)
+        if(pFileInfo->fIsDirectory && pqDirsToTraverse)
         {
             // If pqDirsToTraverse is not null, it means caller wants recursive directory traversal
-            if(pqDirsToTraverse)
+            PDIRINFO pSubDir;
+            if(FAILED(_Init(szSearchpath, TRUE, &pSubDir)))
             {
-                PDIRINFO pSubDir;
-                if(FAILED(_Init(szSearchpath, TRUE, &pSubDir)))
-                {
-                    logwarn(L"Unable to init dir info for: %s", szSearchpath);
-                    free(pFileInfo);
-                    continue;
-                }
-
-                // Insert pSubDir into the queue so that it will be traversed later
-                if(FAILED(pqDirsToTraverse->Insert(pqDirsToTraverse, pSubDir, sizeof pSubDir)))
-                {
-                    logwarn(L"Unable to add sub dir [%s] to traversal queue, cur dir: %s", findData.cFileName, pszFolderpath);
-                    free(pFileInfo);
-                    continue;
-                }
-                ++(pCurDirInfo->nDirs);
-            }
-            else
-            {
-                // Ignore directories when recursive mode is turned OFF
+                logwarn(L"Unable to init dir info for: %s", szSearchpath);
                 free(pFileInfo);
-                logdbg(L"Skipped adding dir: %s", findData.cFileName);
+                continue;
             }
+
+            // Insert pSubDir into the queue so that it will be traversed later
+            if(FAILED(pqDirsToTraverse->Insert(pqDirsToTraverse, pSubDir, sizeof pSubDir)))
+            {
+                logwarn(L"Unable to add sub dir [%s] to traversal queue, cur dir: %s", findData.cFileName, pszFolderpath);
+                free(pFileInfo);
+                continue;
+            }
+            ++(pCurDirInfo->nDirs);
         }
         else
         {
-            // If the current file's name is already inserted, then add it to the
-            // dup within list
-            BOOL fFileAdded = TRUE;
+			// Either this is a file or a directory but the folder must be considered as a file
+			// because recursion is not enabled and we want to enable comparison of some attributes of a folder.
+            // If the current file's name is already inserted, then add it to the dup within list
+            BOOL fFileAdded;
             if(SUCCEEDED(CHL_DsFindHT(pCurDirInfo->phtFiles, findData.cFileName,
 				StringSizeBytes(findData.cFileName), NULL, NULL, TRUE)))
             {
@@ -255,13 +247,13 @@ BOOL BuildFilesInDir_NoHash(
 
             if(!fFileAdded)
             {
-                logerr(L"Cannot add file to file list: %s", findData.cFileName);
+                logerr(L"Cannot add %s to file list: %s", (pFileInfo->fIsDirectory ? L"dir" : L"file"), findData.cFileName);
                 free(pFileInfo);
             }
             else
             {
-                ++(pCurDirInfo->nFiles);
-                logdbg(L"Added file: %s", findData.cFileName);
+                pFileInfo->fIsDirectory ? ++(pCurDirInfo->nDirs) : ++(pCurDirInfo->nFiles);
+                logdbg(L"Added %s: %s", (pFileInfo->fIsDirectory ? L"dir" : L"file"), findData.cFileName);
             }
         }
     } while(FindNextFile(hFindFile, &findData));

@@ -162,8 +162,7 @@ BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO
     // changed one of the folders which would invaliate
     // the unchanged folder's files' duplicacy.
 
-    // Until recursive directory compare is implemented, two directories match
-    // only if their names are the same.
+    // Two directories match only if their names are the same
     if(pLeftFile->fIsDirectory && pRightFile->fIsDirectory)
     {
         if(_wcsnicmp(pLeftFile->szFilename, pRightFile->szFilename, MAX_PATH) == 0)
@@ -179,8 +178,8 @@ BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO
     }
     else if(pLeftFile->fIsDirectory || pRightFile->fIsDirectory)
     {
-        // Only one of them is a directory, there can no match except, but a
-        // name match between a file and directory isn't very useful
+        // Only one of them is a directory, there can be no match except a
+        // name match between a file and directory but it isn't very useful.
         pLeftFile->bDupInfo = FDUP_NO_MATCH;
         pRightFile->bDupInfo = FDUP_NO_MATCH;
     }
@@ -241,16 +240,16 @@ BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO
 
 inline BOOL IsDuplicateFile(_In_ const PFILEINFO pFileInfo)
 {
-    // File is a duplicate if:
-    // 1. Hash matches OR
-    // 2. Name and size and date modified matches
-    BYTE bDupInfo = pFileInfo->bDupInfo;
-    return (bDupInfo & FDUP_HASH_MATCH) ||
-           (
-           (bDupInfo & FDUP_NAME_MATCH) && 
-           (bDupInfo & FDUP_SIZE_MATCH) &&
-           (bDupInfo & FDUP_DATE_MATCH)
-           );
+	BYTE bDupInfo = pFileInfo->bDupInfo;
+	if (pFileInfo->fIsDirectory)
+	{
+		return (bDupInfo & FDUP_NAME_MATCH);
+	}
+
+	return (bDupInfo & FDUP_HASH_MATCH) ||
+		((bDupInfo & FDUP_NAME_MATCH) &&
+		(bDupInfo & FDUP_SIZE_MATCH) &&
+		(bDupInfo & FDUP_DATE_MATCH));
 }
 
 void GetDupTypeString(_In_ PFILEINFO pFileInfo, _Inout_z_ PWSTR pszDupType)
