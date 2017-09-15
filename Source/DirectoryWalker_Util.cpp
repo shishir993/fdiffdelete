@@ -19,13 +19,10 @@ static WCHAR *g_apszBannedFilesFolders[] =
     L"desktop.ini"
 };
 
-// Temp function to convert. Assume safe null-terminated strings
-// with appropriate sized buffers allocated.
-void _ConvertToAscii(_In_ PCWSTR pwsz, _Out_ char* psz)
+int StringSizeBytes(_In_ PCWSTR pwsz)
 {
-    size_t nOrig = wcslen(pwsz) + 1;
-	size_t nConv;
-    wcstombs_s(&nConv, psz, nOrig, pwsz, nOrig);
+	size_t cch = wcslen(pwsz) + 1;
+	return (int)(cch * sizeof(WCHAR));
 }
 
 BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars)

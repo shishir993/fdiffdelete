@@ -38,7 +38,7 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIR
     ZeroMemory(pDirInfo, sizeof(*pDirInfo));
     wcscpy_s(pDirInfo->pszPath, ARRAYSIZE(pDirInfo->pszPath), pszFolderpath);
     int nEstEntries = fRecursive ? 2048 : 256;
-    if(FAILED(CHL_DsCreateHT(&pDirInfo->phtFiles, nEstEntries, CHL_KT_STRING, CHL_VT_POINTER, TRUE)))
+    if(FAILED(CHL_DsCreateHT(&pDirInfo->phtFiles, nEstEntries, CHL_KT_WSTRING, CHL_VT_POINTER, TRUE)))
     {
         logerr(L"Couldn't create hash table for dir: %s", pszFolderpath);
         hr = E_FAIL;
@@ -239,21 +239,18 @@ BOOL BuildFilesInDir_NoHash(
         }
         else
         {
-            // The hashtable supports only char* keys
-            char szKey[MAX_PATH];
-            _ConvertToAscii(findData.cFileName, szKey);
-            int nSize = strnlen_s(szKey, MAX_PATH) + 1;
-
             // If the current file's name is already inserted, then add it to the
             // dup within list
             BOOL fFileAdded = TRUE;
-            if(SUCCEEDED(CHL_DsFindHT(pCurDirInfo->phtFiles, szKey, nSize, NULL, NULL, TRUE)))
+            if(SUCCEEDED(CHL_DsFindHT(pCurDirInfo->phtFiles, findData.cFileName,
+				StringSizeBytes(findData.cFileName), NULL, NULL, TRUE)))
             {
                 fFileAdded = AddToDupWithinList(&pCurDirInfo->stDupFilesInTree, pFileInfo);
             }
             else
             {
-                fFileAdded = SUCCEEDED(CHL_DsInsertHT(pCurDirInfo->phtFiles, szKey, nSize, pFileInfo, sizeof pFileInfo));
+                fFileAdded = SUCCEEDED(CHL_DsInsertHT(pCurDirInfo->phtFiles, findData.cFileName,
+					StringSizeBytes(findData.cFileName), pFileInfo, sizeof pFileInfo));
             }
 
             if(!fFileAdded)
@@ -328,7 +325,7 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
             // Same file found in right dir, compare and mark as duplicate
             if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
-                logdbg(L"Duplicate file: %S", pszLeftFile);
+                logdbg(L"Duplicate file: %s", pszLeftFile);
             }
         }
 
@@ -339,7 +336,7 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
             pRightFile = pRightDir->stDupFilesInTree.apFiles[index];
             if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
-                logdbg(L"DupWithin Duplicate file: %S", pszLeftFile);
+                logdbg(L"DupWithin Duplicate file: %s", pszLeftFile);
             }
         }
     }
@@ -351,10 +348,7 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
         pLeftFile = pLeftDir->stDupFilesInTree.apFiles[i];
 
         // Hashtable first
-        char szKey[MAX_PATH];
-        _ConvertToAscii(pLeftFile->szFilename, szKey);
-        nLeftKeySize = strnlen_s(szKey, MAX_PATH) + 1;
-        if(SUCCEEDED(CHL_DsFindHT(pRightDir->phtFiles, (void*)szKey, nLeftKeySize, &pRightFile, NULL, TRUE)))
+        if(SUCCEEDED(CHL_DsFindHT(pRightDir->phtFiles, pLeftFile->szFilename, StringSizeBytes(pLeftFile->szFilename), &pRightFile, NULL, TRUE)))
         {
             // Same file found in right dir, compare and mark as duplicate
             if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
@@ -427,10 +421,7 @@ static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
     }
 
     // Remove from file list
-    // The hashtable supports only char* keys
-    char szKey[MAX_PATH];
-    _ConvertToAscii(pFileInfo->szFilename, szKey);
-    if(FAILED(CHL_DsRemoveHT(pDirInfo->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1)))
+    if(FAILED(CHL_DsRemoveHT(pDirInfo->phtFiles, pFileInfo->szFilename, StringSizeBytes(pFileInfo->szFilename))))
     {
         // See if file is present in the dup within list
         if(!(RemoveFromDupWithinList(pFileInfo, &pDirInfo->stDupFilesInTree)))
@@ -451,14 +442,11 @@ static BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDe
 {
     if(pUpdateDir)
     {
-        char szKey[MAX_PATH];
+		// Find this file in the other directory and update that file info
+		// to say that it is not a duplicate any more.
         PFILEINFO pFileToUpdate;
-
-        // Find this file in the other directory and update that file info
-        // to say that it is not a duplicate any more.
-        _ConvertToAscii(pFileToDelete->szFilename, szKey);
-        BOOL fFound = SUCCEEDED(CHL_DsFindHT(pUpdateDir->phtFiles, szKey, strnlen_s(szKey, MAX_PATH) + 1,
-            &pFileToUpdate, NULL, TRUE));
+        BOOL fFound = SUCCEEDED(CHL_DsFindHT(pUpdateDir->phtFiles, pFileToDelete->szFilename,
+			StringSizeBytes(pFileToDelete->szFilename), &pFileToUpdate, NULL, TRUE));
     
         // Must find in the other dir also.
         SB_ASSERT(fFound);
@@ -535,8 +523,6 @@ BOOL DeleteFilesInDir_NoHash(
     SB_ASSERT(paszFileNamesToDelete);
     SB_ASSERT(nFileNames >= 0);
 
-    char szKey[MAX_PATH];
-    int nKeySize;
     PFILEINFO pFileToDelete;
     //PFILEINFO pFileToUpdate;
 
@@ -544,9 +530,8 @@ BOOL DeleteFilesInDir_NoHash(
     loginfo(L"Deleting %d files from %s", nFileNames, pDirDeleteFrom->pszPath);
     while(index < nFileNames)
     {
-        _ConvertToAscii(paszFileNamesToDelete + (index * MAX_PATH), szKey);
-        nKeySize = strnlen_s(szKey, ARRAYSIZE(szKey)) + 1;
-        if(SUCCEEDED(CHL_DsFindHT(pDirDeleteFrom->phtFiles, szKey, nKeySize, &pFileToDelete, NULL, TRUE)))
+        if(SUCCEEDED(CHL_DsFindHT(pDirDeleteFrom->phtFiles, (PCVOID)paszFileNamesToDelete,
+			StringSizeBytes(paszFileNamesToDelete), &pFileToDelete, NULL, TRUE)))
         {
             _DeleteFileUpdateDir(pFileToDelete, pDirDeleteFrom, pDirToUpdate);
         }

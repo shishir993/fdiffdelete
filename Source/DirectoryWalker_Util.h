@@ -10,5 +10,5 @@
 
 #include "Common.h"
 
-void _ConvertToAscii(_In_ PCWSTR pwsz, _Out_ char* psz);
+int StringSizeBytes(_In_ PCWSTR pwsz);
 BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars);
