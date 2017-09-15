@@ -162,23 +162,34 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                 }
 
                 case IDC_BTN_BRWS_LEFT:
-                    if(SUCCEEDED(GetFolderToOpen(uiInfo.szFolderpathLeft)))
-                    {
-                        // Populate the edit control with this path
-                        SendMessage(GetDlgItem(hDlg, IDC_EDIT_LEFT), WM_SETTEXT, 0, (LPARAM)uiInfo.szFolderpathLeft);
-                    }
-                    return TRUE;
+				{
+					WCHAR szPath[MAX_PATH];
+					if (SUCCEEDED(GetFolderToOpen(szPath)))
+					{
+						// Populate the edit control with this path
+						SendMessage(GetDlgItem(hDlg, IDC_EDIT_LEFT), WM_SETTEXT, 0, (LPARAM)szPath);
+					}
+					return TRUE;
+				}
 
                 case IDC_BTN_BRWS_RIGHT:
-                    if(SUCCEEDED(GetFolderToOpen(uiInfo.szFolderpathRight)))
-                    {
-                        // Populate the edit control with this path
-                        SendMessage(GetDlgItem(hDlg, IDC_EDIT_RIGHT), WM_SETTEXT, 0, (LPARAM)uiInfo.szFolderpathRight);
-                    }
-                    return TRUE;
+				{
+					WCHAR szPath[MAX_PATH];
+					if (SUCCEEDED(GetFolderToOpen(szPath)))
+					{
+						// Populate the edit control with this path
+						SendMessage(GetDlgItem(hDlg, IDC_EDIT_RIGHT), WM_SETTEXT, 0, (LPARAM)szPath);
+					}
+					return TRUE;
+				}
 
 				case IDC_BTN_DIFF:
 				{
+					SendMessage(GetDlgItem(hDlg, IDC_EDIT_LEFT), WM_GETTEXT,
+						ARRAYSIZE(uiInfo.szFolderpathLeft), (LPARAM)uiInfo.szFolderpathLeft);
+					SendMessage(GetDlgItem(hDlg, IDC_EDIT_RIGHT), WM_GETTEXT,
+						ARRAYSIZE(uiInfo.szFolderpathRight), (LPARAM)uiInfo.szFolderpathRight);
+
 					if (uiInfo.szFolderpathLeft[0] != 0 && uiInfo.szFolderpathRight[0] != 0)
 					{
 						SendMessage(hDlg, WM_DIFF, FALSE, (LPARAM)NULL);
