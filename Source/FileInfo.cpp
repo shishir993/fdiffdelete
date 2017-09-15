@@ -53,18 +53,6 @@ BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ BOOL fComputeHash, _In_ 
     // Check if file is a directory
     // TODO: To extend this limit to 32,767 wide characters, 
     // call the Unicode version of the function and prepend "\\?\" to the path
-    DWORD dwAttr = GetFileAttributes(pszFullpathToFile);
-    if(dwAttr == INVALID_FILE_ATTRIBUTES)
-    {
-        logerr(L"Unable to get attributes of file: %s", pszFullpathToFile);
-        goto error_return;
-    }
-
-    if(dwAttr & FILE_ATTRIBUTE_DIRECTORY)
-    {
-        pFileInfo->fIsDirectory = TRUE;
-    }
-    
     WIN32_FILE_ATTRIBUTE_DATA fileAttr;
     if(!GetFileAttributesEx(pszFullpathToFile, GetFileExInfoStandard, &fileAttr))
     {
@@ -72,24 +60,22 @@ BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ BOOL fComputeHash, _In_ 
         goto error_return;
     }
 
+	// Store FILETIME in fileinfo for easy comparison in sorting the listview rows
+	CopyMemory(&pFileInfo->ftModifiedTime, &fileAttr.ftLastWriteTime, sizeof(pFileInfo->ftModifiedTime));
+
+	// Convert filetime to localtime and store in fileinfo
+	SYSTEMTIME stUTC;
+	FileTimeToSystemTime(&pFileInfo->ftModifiedTime, &stUTC);
+	SystemTimeToTzSpecificLocalTime(NULL, &stUTC, &pFileInfo->stModifiedTime);
+
     if(fileAttr.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
     {
         pFileInfo->fIsDirectory = TRUE;
     }
     else
     {
-        // Store filesize, last access time in fileinfo
-
-        pFileInfo->llFilesize.HighPart = fileAttr.nFileSizeHigh;
-        pFileInfo->llFilesize.LowPart = fileAttr.nFileSizeLow;
-
-        // Store FILETIME in fileinfo for easy comparison in sorting the listview rows
-        CopyMemory(&pFileInfo->ftModifiedTime, &fileAttr.ftLastWriteTime, sizeof(pFileInfo->ftModifiedTime));
-
-        // Convert filetime to localtime and store in fileinfo
-        SYSTEMTIME stUTC;
-        FileTimeToSystemTime(&pFileInfo->ftModifiedTime, &stUTC);
-        SystemTimeToTzSpecificLocalTime(NULL, &stUTC, &pFileInfo->stModifiedTime);
+		pFileInfo->llFilesize.HighPart = fileAttr.nFileSizeHigh;
+		pFileInfo->llFilesize.LowPart = fileAttr.nFileSizeLow;
 
         if(fComputeHash)
         {
