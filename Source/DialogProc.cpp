@@ -67,7 +67,6 @@ static BOOL UpdateDirInfo(
     _In_ BOOL fCompareHashes);
 
 static BOOL CheckInvalidDir(_In_ HWND hDlg, _In_ PCWSTR pszFolderpath);
-static BOOL OnHashCompareToggle(_In_ HWND hDlg, _In_ FDIFFUI_INFO *pUiInfo);
 
 // Function definitions
 
@@ -129,18 +128,15 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 			{
                 case IDM_ENABLEHASHCOMPARE:
                 {
-                    if(OnHashCompareToggle(hDlg, &uiInfo))
+                    HMENU hMenu = GetMenu(hDlg);
+                    if(IsMenuItemChecked(hMenu, IDM_ENABLEHASHCOMPARE))
                     {
-                        HMENU hMenu = GetMenu(hDlg);
-                        if(IsMenuItemChecked(hMenu, IDM_ENABLEHASHCOMPARE))
-                        {
-                            // Remove check mark
-                            CheckMenuItem(hMenu, IDM_ENABLEHASHCOMPARE, MF_BYCOMMAND | MF_UNCHECKED);
-                        }
-                        else
-                        {
-                            CheckMenuItem(hMenu, IDM_ENABLEHASHCOMPARE, MF_BYCOMMAND | MF_CHECKED);
-                        }
+                        // Remove check mark
+                        CheckMenuItem(hMenu, IDM_ENABLEHASHCOMPARE, MF_BYCOMMAND | MF_UNCHECKED);
+                    }
+                    else
+                    {
+                        CheckMenuItem(hMenu, IDM_ENABLEHASHCOMPARE, MF_BYCOMMAND | MF_CHECKED);
                     }
                     return 0;
                 }
@@ -483,40 +479,4 @@ static BOOL CheckInvalidDir(_In_ HWND hDlg, _In_ PCWSTR pszFolderpath)
         fValidFolder = FALSE;
     }
     return fValidFolder;
-}
-
-static BOOL OnHashCompareToggle(_In_ HWND hDlg, _In_ FDIFFUI_INFO *pUiInfo)
-{
-    // Nothing to ask and delete if both are already empty
-    if(pUiInfo->iFSpecState_Left == FSPEC_STATE_EMPTY && pUiInfo->iFSpecState_Right == FSPEC_STATE_EMPTY)
-    {
-        return TRUE;
-    }
-
-    BOOL fContinue = FALSE;
-    int iUserChoice = MessageBoxW(hDlg, L"Toggling this clears out the populated lists, if any. Proceed?", L"Continue?", MB_YESNO|MB_ICONQUESTION);
-    if(iUserChoice == IDYES)
-    {
-        fContinue = TRUE;
-        if(pUiInfo->pLeftDirInfo)
-        {
-            ListView_DeleteAllItems(pUiInfo->hLvLeft);
-            SetWindowText(pUiInfo->hStaticLeft, L"");
-
-            DestroyDirInfo(pUiInfo->pLeftDirInfo);
-            pUiInfo->pLeftDirInfo = NULL;
-            pUiInfo->iFSpecState_Left = FSPEC_STATE_EMPTY;
-        }
-
-        if(pUiInfo->pRightDirInfo)
-        {
-            ListView_DeleteAllItems(pUiInfo->hLvRight);
-            SetWindowText(pUiInfo->hStaticRight, L"");
-
-            DestroyDirInfo(pUiInfo->pRightDirInfo);
-            pUiInfo->pRightDirInfo = NULL;
-            pUiInfo->iFSpecState_Right = FSPEC_STATE_EMPTY;
-        }
-    }
-    return fContinue;
 }
