@@ -126,36 +126,6 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 			// handle commands from child controls
 			switch(LOWORD(wParam))
 			{
-                case IDM_ENABLEHASHCOMPARE:
-                {
-                    HMENU hMenu = GetMenu(hDlg);
-                    if(IsMenuItemChecked(hMenu, IDM_ENABLEHASHCOMPARE))
-                    {
-                        // Remove check mark
-                        CheckMenuItem(hMenu, IDM_ENABLEHASHCOMPARE, MF_BYCOMMAND | MF_UNCHECKED);
-                    }
-                    else
-                    {
-                        CheckMenuItem(hMenu, IDM_ENABLEHASHCOMPARE, MF_BYCOMMAND | MF_CHECKED);
-                    }
-                    return 0;
-                }
-
-                case IDM_ENABLERECURSIVECOMPARE:
-                {
-                    HMENU hMenu = GetMenu(hDlg);
-                    if(IsMenuItemChecked(hMenu, IDM_ENABLERECURSIVECOMPARE))
-                    {
-                        // Remove check mark
-                        CheckMenuItem(hMenu, IDM_ENABLERECURSIVECOMPARE, MF_BYCOMMAND | MF_UNCHECKED);
-                    }
-                    else
-                    {
-                        CheckMenuItem(hMenu, IDM_ENABLERECURSIVECOMPARE, MF_BYCOMMAND | MF_CHECKED);
-                    }
-                    return 0;
-                }
-
                 case IDM_ABOUT:
                 {
                     break;
@@ -360,10 +330,11 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
 
 			if (szMessage[0] == 0)
 			{
-				BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
+				BOOL fRecursive = (IsDlgButtonChecked(hDlg, IDC_CHK_RECRS) == BST_CHECKED);
+				BOOL fHashCompare = (IsDlgButtonChecked(hDlg, IDC_CHK_HASH) == BST_CHECKED);
 				uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
 				uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
-				UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
+				UpdateFileListViews(&uiInfo, fRecursive, fHashCompare);
 			}
 			else
 			{
