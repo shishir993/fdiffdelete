@@ -21,6 +21,7 @@
 #include "HashTable.h"
 #include "General.h"
 #include "GuiFunctions.h"
+#include "RArray.h"
 
 #include "Assert.h"
 #include "DbgHelpers.h"

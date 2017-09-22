@@ -18,7 +18,7 @@
 #define INIT_DUP_WITHIN_SIZE    32
 
 static BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO pFileInfo);
-static int FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _In_ int iStartIndex);
+static PFILEINFO FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _Inout_ int* piStartIndex);
 static BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES_WITHIN pDupWithinToSearch);
 static BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir);
 
@@ -46,13 +46,12 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIR
     }
 
     // Allocate an array of pointer for the dup within files
-    pDirInfo->stDupFilesInTree.nCurSize = INIT_DUP_WITHIN_SIZE;
-    pDirInfo->stDupFilesInTree.apFiles = (PFILEINFO*)malloc(sizeof(PFILEINFO) * INIT_DUP_WITHIN_SIZE);
-    if(pDirInfo->stDupFilesInTree.apFiles == NULL)
-    {
-        hr = E_OUTOFMEMORY;
-        goto error_return;
-    }
+	hr = CHL_DsCreateRA(&pDirInfo->stDupFilesInTree.aFiles, CHL_VT_USEROBJECT, INIT_DUP_WITHIN_SIZE, (MAXINT / 2));
+	if (FAILED(hr))
+	{
+		logerr(L"Couldn't create resizable array for dup files, hr: %x", hr);
+		goto error_return;
+	}
 
     *ppDirInfo = pDirInfo;
     return hr;
@@ -75,21 +74,7 @@ void DestroyDirInfo_NoHash(_In_ PDIRINFO pDirInfo)
         CHL_DsDestroyHT(pDirInfo->phtFiles);
     }
 
-    // Free each FILEINFO stored in the dup within list
-    for(int i = 0; i < pDirInfo->stDupFilesInTree.nCurFiles; ++i)
-    {
-        PFILEINFO pFile = pDirInfo->stDupFilesInTree.apFiles[i];
-        if(pFile != NULL)
-        {
-            free(pFile);
-        }
-    }
-
-    // Finally, free the list of FILEINFO pointers itself
-    if(pDirInfo->stDupFilesInTree.apFiles != NULL)
-    {
-        free(pDirInfo->stDupFilesInTree.apFiles);
-    }
+	CHL_DsDestroyRA(&pDirInfo->stDupFilesInTree.aFiles);
 
     free(pDirInfo);
 }
@@ -148,6 +133,8 @@ BOOL BuildFilesInDir_NoHash(
     SB_ASSERT(pszFolderpath);
     SB_ASSERT(ppDirInfo);
 
+	HANDLE hFindFile = NULL;
+
     loginfo(L"Building dir: %s", pszFolderpath);
     if(*ppDirInfo == NULL && FAILED(_Init(pszFolderpath, (pqDirsToTraverse != NULL), ppDirInfo)))
     {
@@ -172,7 +159,7 @@ BOOL BuildFilesInDir_NoHash(
 
     // Initialize search for files in folder
     WIN32_FIND_DATA findData;
-    HANDLE hFindFile = FindFirstFile(szSearchpath, &findData);
+    hFindFile = FindFirstFile(szSearchpath, &findData);
     if(hFindFile == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND)
     {
         // No files found under the folder. Just return.
@@ -321,11 +308,10 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
             }
         }
 
-        int index = -1;
-        while((index = FindInDupWithinList(pLeftFile->szFilename, &pRightDir->stDupFilesInTree, index + 1)) != -1)
+        int index = 0;
+        while((pRightFile = FindInDupWithinList(pLeftFile->szFilename, &pRightDir->stDupFilesInTree, &index)) != NULL)
         {
             // Same file found in right dir, compare and mark as duplicate
-            pRightFile = pRightDir->stDupFilesInTree.apFiles[index];
             if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
                 logdbg(L"DupWithin Duplicate file: %s", pszLeftFile);
@@ -337,7 +323,10 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
     for(int i = 0; i < pLeftDir->stDupFilesInTree.nCurFiles; ++i)
     {
         // Check if this file is in the right dir by checking both its hashtable and the dupwithin list
-        pLeftFile = pLeftDir->stDupFilesInTree.apFiles[i];
+		if (FAILED(CHL_DsReadRA(&pLeftDir->stDupFilesInTree.aFiles, i, &pLeftFile, NULL, TRUE)))
+		{
+			continue;
+		}
 
         // Hashtable first
         if(SUCCEEDED(CHL_DsFindHT(pRightDir->phtFiles, pLeftFile->szFilename, StringSizeBytes(pLeftFile->szFilename), &pRightFile, NULL, TRUE)))
@@ -350,11 +339,10 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
         }
 
         // Now, the dup-within
-        int index = -1;
-        while((index = FindInDupWithinList(pLeftFile->szFilename, &pRightDir->stDupFilesInTree, index + 1)) != -1)
+        int index = 0;
+        while((pRightFile = FindInDupWithinList(pLeftFile->szFilename, &pRightDir->stDupFilesInTree, &index)) != NULL)
         {
             // Same file found in right dir, compare and mark as duplicate
-            pRightFile = pRightDir->stDupFilesInTree.apFiles[index];
             if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
                 logdbg(L"DupWithin Duplicate file: %s", pLeftFile->szFilename);
@@ -552,7 +540,12 @@ void PrintDirTree_NoHash(_In_ PDIRINFO pRootDir)
         wprintf(L"These are the files that are duplicate within the specified root folder's tree itself:\n");
         for(int i = 0; i < pRootDir->stDupFilesInTree.nCurFiles; ++i)
         {
-            PFILEINFO pFileInfo = pRootDir->stDupFilesInTree.apFiles[i];
+			PFILEINFO pFileInfo;
+			if (FAILED(CHL_DsReadRA(&pRootDir->stDupFilesInTree.aFiles, i, &pFileInfo, NULL, TRUE)))
+			{
+				continue;
+			}
+
             wprintf(L"%10u %c %1d %s\n",
                 pFileInfo->llFilesize.LowPart,
                 pFileInfo->fIsDirectory ? L'D' : L'F',
@@ -593,60 +586,34 @@ void PrintFilesInDir_NoHash(_In_ PDIRINFO pDirInfo)
 
 static BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO pFileInfo)
 {
-    BOOL fContinue = TRUE;
-    if(pDupWithin->nCurFiles >= pDupWithin->nCurSize)
+	HRESULT hr = pDupWithin->aFiles.Write(&pDupWithin->aFiles, pDupWithin->nCurFiles, pFileInfo, sizeof(*pFileInfo));
+    if(SUCCEEDED(hr))
     {
-        // Must resize buffer
-
-        if(CHL_GnIsOverflowINT(pDupWithin->nCurSize, pDupWithin->nCurSize))
-        {
-            logerr(L"Reached limit of int arithmetic for nCurSize = %d!", pDupWithin->nCurSize);
-            fContinue = FALSE;
-        }
-        else
-        {
-            int nNewNumFiles = pDupWithin->nCurSize << 1;
-            logdbg(L"Resizing to size %d", nNewNumFiles);
-            PFILEINFO* apnew = (PFILEINFO*)realloc(pDupWithin->apFiles, sizeof(PFILEINFO) * nNewNumFiles);
-            if(apnew != NULL)
-            {
-                pDupWithin->apFiles = apnew;
-                pDupWithin->nCurSize = nNewNumFiles;
-            }
-            else
-            {
-                logerr(L"Out of memory.");
-                fContinue = FALSE;
-            }
-        }
+		++(pDupWithin->nCurFiles);
     }
-
-    if(fContinue)
-    {
-        // Now, insert into list
-        pDupWithin->apFiles[pDupWithin->nCurFiles] = pFileInfo;
-        ++(pDupWithin->nCurFiles);
-    }
-    return fContinue;
+	return SUCCEEDED(hr);
 }
 
-static int FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _In_ int iStartIndex)
+static PFILEINFO FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _Inout_ int* piStartIndex)
 {
-    SB_ASSERT(iStartIndex >= 0 && iStartIndex <= pDupWithinToSearch->nCurFiles);
-    for(int i = iStartIndex; i < pDupWithinToSearch->nCurFiles; ++i)
-    {
-        PFILEINFO pFile = pDupWithinToSearch->apFiles[i];
-        if(pFile == NULL)
-        {
-            continue;
-        }
+    SB_ASSERT(0 <= *piStartIndex && *piStartIndex <= pDupWithinToSearch->nCurFiles);
 
-        if(_wcsnicmp(pszFilename, pFile->szFilename, MAX_PATH) == 0)
+    while (*piStartIndex < pDupWithinToSearch->nCurFiles)
+    {
+		++(*piStartIndex);
+
+		PFILEINFO pFile;
+		if (FAILED(CHL_DsReadRA(&pDupWithinToSearch->aFiles, (*piStartIndex) - 1, &pFile, NULL, TRUE)))
+		{
+			continue;
+		}
+
+        if (_wcsnicmp(pszFilename, pFile->szFilename, MAX_PATH) == 0)
         {
-            return i;
+			return pFile;
         }
     }
-    return -1;
+    return NULL;
 }
 
 static BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES_WITHIN pDupWithinToSearch)
@@ -661,7 +628,12 @@ static BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES
     WCHAR pszCompareToPath[MAX_PATH];
     for(int i = 0; i < pDupWithinToSearch->nCurFiles; ++i)
     {
-        PFILEINFO pFile = pDupWithinToSearch->apFiles[i];
+		PFILEINFO pFile;
+		if (FAILED(CHL_DsReadRA(&pDupWithinToSearch->aFiles, i, &pFile, NULL, TRUE)))
+		{
+			continue;
+		}
+
         if(PathCombine(pszCompareToPath, pFile->szPath, pFile->szFilename) == NULL)
         {
             logerr(L"PathCombine() failed for %s + %s", pFile->szPath, pFile->szFilename);
@@ -670,8 +642,7 @@ static BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES
 
         if(_wcsnicmp(pszCompareFromPath, pszCompareToPath, MAX_PATH) == 0)
         {
-            free(pFile);
-            pDupWithinToSearch->apFiles[i] = NULL;
+			CHL_DsClearAtRA(&pDupWithinToSearch->aFiles, i);
             return TRUE;
         }
     }

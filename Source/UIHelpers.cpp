@@ -305,7 +305,11 @@ static BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo)
     // Insert the name-duplicate files now.
     for(int i = 0; i < pDirInfo->stDupFilesInTree.nCurFiles; ++i)
     {
-        pFileInfo = pDirInfo->stDupFilesInTree.apFiles[i];
+		if (FAILED(CHL_DsReadRA(&pDirInfo->stDupFilesInTree.aFiles, i, &pFileInfo, NULL, TRUE)))
+		{
+			continue;
+		}
+
         ConstructListViewRow(pFileInfo, apszListRow);
         if(FAILED(CHL_GuiAddListViewRow(hList, apszListRow, ARRAYSIZE(apszListRow), (LPARAM)pFileInfo)))
         {

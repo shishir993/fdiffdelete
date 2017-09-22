@@ -18,9 +18,8 @@
 typedef struct _dupWithin
 {
     int nCurFiles;
-    int nCurSize;
-    PFILEINFO *apFiles;
-}DUPFILES_WITHIN, *PDUPFILES_WITHIN;
+	CHL_RARRAY aFiles;
+} DUPFILES_WITHIN, *PDUPFILES_WITHIN;
 
 typedef struct _DirectoryInfo
 {
