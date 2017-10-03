@@ -124,7 +124,6 @@
     <ClInclude Include="DirectoryWalker.h" />
     <ClInclude Include="HashFactory.h" />
     <ClInclude Include="resource.h" />
-    <ClInclude Include="resource1.h" />
     <ClInclude Include="UIHelpers.h" />
   </ItemGroup>
   <ItemGroup>

@@ -203,9 +203,10 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                     {
                         // Update the list views
                         // TODO: This function destroys dir info and rebuilds it. Not necessary.
-                        BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
+						BOOL fRecursive = (IsDlgButtonChecked(hDlg, IDC_CHK_RECRS) == BST_CHECKED);
+						BOOL fHashCompare = (IsDlgButtonChecked(hDlg, IDC_CHK_HASH) == BST_CHECKED);
                         uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
-                        UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
+                        UpdateFileListViews(&uiInfo, fRecursive, fHashCompare);
                     }
                     return TRUE;
                 }
@@ -245,9 +246,10 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                     {
                         // Update the list views
                         // TODO: This function destroys dir info and rebuilds it. Not necessary.
-                        BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
+						BOOL fRecursive = (IsDlgButtonChecked(hDlg, IDC_CHK_RECRS) == BST_CHECKED);
+						BOOL fHashCompare = (IsDlgButtonChecked(hDlg, IDC_CHK_HASH) == BST_CHECKED);
                         uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
-                        UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
+                        UpdateFileListViews(&uiInfo, fRecursive, fHashCompare);
                     }
                     return TRUE;
                 }
@@ -265,16 +267,15 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                             uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
                         }
 
-                        BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
-                        UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
+						BOOL fRecursive = (IsDlgButtonChecked(hDlg, IDC_CHK_RECRS) == BST_CHECKED);
+						BOOL fHashCompare = (IsDlgButtonChecked(hDlg, IDC_CHK_HASH) == BST_CHECKED);
+                        UpdateFileListViews(&uiInfo, fRecursive, fHashCompare);
                     }
                     return TRUE;
 
                 case IDC_BTN_DELALL_RIGHT:
                     if(uiInfo.pRightDirInfo != NULL)
                     {
-                        BOOL fRecursive = IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLERECURSIVECOMPARE);
-
                         // NULL check for the second parameter is in the callee
                         DeleteDupFilesInDir(uiInfo.pRightDirInfo, uiInfo.pLeftDirInfo);
                         uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
@@ -284,7 +285,10 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                         {
                             uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
                         }
-                        UpdateFileListViews(&uiInfo, fRecursive, IsMenuItemChecked(GetMenu(hDlg), IDM_ENABLEHASHCOMPARE));
+
+						BOOL fRecursive = (IsDlgButtonChecked(hDlg, IDC_CHK_RECRS) == BST_CHECKED);
+						BOOL fHashCompare = (IsDlgButtonChecked(hDlg, IDC_CHK_HASH) == BST_CHECKED);
+                        UpdateFileListViews(&uiInfo, fRecursive, fHashCompare);
                     }
                     return TRUE;
 			}
