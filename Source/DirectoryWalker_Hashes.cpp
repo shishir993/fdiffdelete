@@ -345,7 +345,7 @@ static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
     loginfo(L"Deleting file = %s", pszFilepath);
     if(!DeleteFile(pszFilepath))
     {
-        logerr(L"DeleteFile() failed.");
+        logerr(L"DeleteFile failed, err: %u", GetLastError());
         fRetVal = FALSE;
     }
 

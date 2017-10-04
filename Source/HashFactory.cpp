@@ -46,59 +46,77 @@ HRESULT CalculateSHA1(_In_ HCRYPTPROV hCrypt, _In_ HANDLE hFile, _Out_bytecap_c_
 
     HRESULT hr = S_OK;
     HCRYPTHASH hHash = NULL;
-    if(CryptCreateHash(hCrypt, CALG_SHA1, NULL, 0, &hHash))
-    {
-        HANDLE hMapObj, hMapView;
-        if(SUCCEEDED(CHL_GnCreateMemMapOfFile(hFile, PAGE_READONLY, &hMapObj, &hMapView)))
-        {
-            ULARGE_INTEGER ullFileSize;
-            ullFileSize.LowPart = GetFileSize(hFile, &ullFileSize.HighPart);
-            if(ullFileSize.LowPart != INVALID_FILE_SIZE)
-            {
-                if(CryptHashData(hHash, (PBYTE)hMapView, ullFileSize.LowPart, 0))
-                {
-                    DWORD dwHashSize = HASHLEN_SHA1;
-                    if(CryptGetHashParam(hHash, HP_HASHVAL, pbHash, &dwHashSize, 0))
-                    {
-#ifdef _DEBUG
-                        CHAR szHash[STRLEN_SHA1];
-                        HashValueToString(pbHash, szHash);
-                        wprintf(L"Hash string = [%S]\n", szHash);
-#endif
-                    }
-                    else
-                    {
-                        hr = HRESULT_FROM_WIN32(GetLastError());
-                        logerr(L"CryptGetHashParam() failed.");
+	HANDLE hMapObj = NULL;
+	HANDLE hMapView = NULL;
+	DWORD dwHashSize = HASHLEN_SHA1;
+	LARGE_INTEGER fileSize = {};
 
-                    }
-                }
-                else
-                {
-                    hr = HRESULT_FROM_WIN32(GetLastError());
-                    logerr(L"CryptHashData() failed.");
-                }
-            }
-            else
-            {
-                hr = HRESULT_FROM_WIN32(GetLastError());
-                logerr(L"GetFileSize().");
-            }
-            CloseHandle(hMapObj);
-        }
-        else
-        {
-            hr = E_FAIL;
-            logerr(L"Cannot create memory map.");
-        }
-            
-        CryptDestroyHash(hHash);
-    }
-    else
-    {
-        hr = HRESULT_FROM_WIN32(GetLastError());
-        logerr(L"CryptCreateHash() failed");
-    }
+	if (!CryptCreateHash(hCrypt, CALG_SHA1, NULL, 0, &hHash))
+	{
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		logerr(L"CryptCreateHash() failed");
+		goto fend;
+	}
+        
+	hr = CHL_GnCreateMemMapOfFile(hFile, PAGE_READONLY, &hMapObj, &hMapView);
+	if (FAILED(hr))
+	{
+		logerr(L"Failed to mem-map file, hr: %x", hr);
+		goto fend;
+	}
+
+	if (!GetFileSizeEx(hFile, &fileSize))
+	{
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		logerr(L"GetFileSizeEx failed, hr: %x", hr);
+		goto fend;
+	}
+	if (MAXDWORD < fileSize.QuadPart)
+	{
+		hr = HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+		logerr(L"File too big");
+		goto fend;
+	}
+
+	if (!CryptHashData(hHash, (PBYTE)hMapView, fileSize.LowPart, 0))
+	{
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		logerr(L"CryptHashData failed, hr: %x", hr);
+		goto fend;
+	}
+
+	if (CryptGetHashParam(hHash, HP_HASHVAL, pbHash, &dwHashSize, 0))
+	{
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		logerr(L"CryptGetHashParam failed, hr: %x");
+		goto fend;
+	}
+
+#ifdef _DEBUG
+    CHAR szHash[STRLEN_SHA1];
+    HashValueToString(pbHash, szHash);
+    wprintf(L"Hash string = [%S]\n", szHash);
+#endif
+
+fend:
+	if (hHash != NULL)
+	{
+		CryptDestroyHash(hHash);
+		hHash = NULL;
+	}
+
+	if (hMapView != NULL)
+	{
+		UnmapViewOfFile(hMapView);
+		hMapView = NULL;
+	}
+
+	if (hMapObj != NULL)
+	{
+		CloseHandle(hMapObj);
+		hMapObj = NULL;
+	}
+	
     return hr;
 }
 
