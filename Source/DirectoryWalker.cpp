@@ -386,7 +386,7 @@ static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
     BOOL fRetVal = TRUE;
 
     WCHAR pszFilepath[MAX_PATH];
-    loginfo(L"Deleting file = %s", pszFilepath);
+    loginfo(L"Deleting file = %s\\%s", pFileInfo->szPath, pFileInfo->szFilename);
     if(PathCombine(pszFilepath, pFileInfo->szPath, pFileInfo->szFilename) == NULL)
     {
         logerr(L"PathCombine() failed for %s + %s", pFileInfo->szPath, pFileInfo->szFilename);
@@ -396,7 +396,7 @@ static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
 
     if(!DeleteFile(pszFilepath))
     {
-        logerr(L"DeleteFile() failed.");
+        logerr(L"DeleteFile failed, err: %u", GetLastError());
         fRetVal = FALSE;
     }
 
