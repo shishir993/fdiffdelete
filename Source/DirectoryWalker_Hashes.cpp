@@ -12,7 +12,6 @@
 #include "HashFactory.h"
 
 static BOOL InsertIntoFileList(_In_ PDIRINFO pDirInfo, _In_opt_ PCWSTR pszKey, _In_ PFILEINFO pFile);
-static BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir);
 
 static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIRINFO* ppDirInfo)
 {

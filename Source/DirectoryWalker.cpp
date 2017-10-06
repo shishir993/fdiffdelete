@@ -20,7 +20,6 @@
 static BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO pFileInfo);
 static PFILEINFO FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _Inout_ int* piStartIndex);
 static BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES_WITHIN pDupWithinToSearch);
-static BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir);
 
 static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo);
 static BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDeleteFrom, _In_opt_ PDIRINFO pUpdateDir);
@@ -276,12 +275,6 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
     SB_ASSERT(pLeftDir);
     SB_ASSERT(pRightDir);
 
-    // Trivial check for directory to be empty
-    if(pLeftDir->nFiles <= 0 || pRightDir->nFiles <= 0)
-    {
-        return TRUE;
-    }
-
     // For each file in the left dir, search for the same in the right dir
     // If found, pass both to the CompareFileInfoAndMark().
 
@@ -304,7 +297,7 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
             // Same file found in right dir, compare and mark as duplicate
             if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
-                logdbg(L"Duplicate file: %s", pszLeftFile);
+                logdbg(L"Duplicate %s: %s", (pLeftFile->fIsDirectory ? L"dir" : L"file"), pszLeftFile);
             }
         }
 
@@ -314,7 +307,7 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
             // Same file found in right dir, compare and mark as duplicate
             if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
-                logdbg(L"DupWithin Duplicate file: %s", pszLeftFile);
+                logdbg(L"DupWithin Duplicate %s: %s", (pLeftFile->fIsDirectory ? L"dir" : L"file"), pszLeftFile);
             }
         }
     }

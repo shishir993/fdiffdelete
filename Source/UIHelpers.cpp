@@ -270,10 +270,6 @@ error_return:
 static BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo)
 {
     ListView_DeleteAllItems(hList);
-    if(pDirInfo->nFiles <= 0)
-    {
-        return TRUE;
-    }
 
     CHL_HT_ITERATOR itr;
     CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr);
@@ -336,10 +332,6 @@ BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo, _In_ BOOL fCompar
     }
 
     ListView_DeleteAllItems(hList);
-    if(pDirInfo->nFiles <= 0)
-    {
-        return TRUE;
-    }
 
     CHL_HT_ITERATOR itr;
     CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr);
