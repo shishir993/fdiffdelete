@@ -36,3 +36,46 @@ BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars)
     }
     return FALSE;
 }
+
+BOOL IsDirectoryEmpty(_In_z_ PCWSTR pszPath)
+{
+	// In order to list all files within the specified directory,
+	// path sent to FindFirstFile must end with a "\\*"
+	WCHAR szSearchpath[MAX_PATH] = L"";
+	wcscpy_s(szSearchpath, ARRAYSIZE(szSearchpath), pszPath);
+
+	int nLen = wcsnlen(pszPath, MAX_PATH);
+	if (nLen > 2 && wcsncmp(pszPath + nLen - 2, L"\\*", MAX_PATH) != 0)
+	{
+		PathCchCombine(szSearchpath, ARRAYSIZE(szSearchpath), pszPath, L"*");
+	}
+
+	// Initialize search for files in folder
+	WIN32_FIND_DATA findData;
+	HANDLE hFindFile = FindFirstFile(szSearchpath, &findData);
+	if ((hFindFile == INVALID_HANDLE_VALUE) && (GetLastError() == ERROR_FILE_NOT_FOUND))
+	{
+		// No files found under the folder. Just return.
+		return TRUE;
+	}
+
+	if (hFindFile == INVALID_HANDLE_VALUE)
+	{
+		logerr(L"FindFirstFile failed, err: %u", GetLastError());
+		return FALSE;
+	}
+
+	do
+	{
+		if (!((wcscmp(findData.cFileName, L".") == 0) 
+			|| (wcscmp(findData.cFileName, L"..") == 0)))
+		{
+			FindClose(hFindFile);
+			return FALSE;
+		}
+	} while (FindNextFile(hFindFile, &findData));
+	
+	BOOL fEmpty = (GetLastError() == ERROR_NO_MORE_FILES) ? TRUE : FALSE;
+	FindClose(hFindFile);
+	return fEmpty;
+}

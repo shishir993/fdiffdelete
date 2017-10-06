@@ -20,7 +20,7 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIR
     if(pDirInfo == NULL)
     {
         hr = E_OUTOFMEMORY;
-        goto error_return;
+		goto error_return;
     }
 
     ZeroMemory(pDirInfo, sizeof(*pDirInfo));
@@ -154,8 +154,7 @@ BOOL BuildFilesInDir_Hash(
     int nLen = wcsnlen(pszFolderpath, MAX_PATH);
     if(nLen > 2 && wcsncmp(pszFolderpath + nLen - 2, L"\\*", MAX_PATH) != 0)
     {
-        wcscpy_s(szSearchpath, ARRAYSIZE(szSearchpath), pszFolderpath);
-        wcscat_s(szSearchpath, ARRAYSIZE(szSearchpath), L"\\*");
+		PathCchCombine(szSearchpath, ARRAYSIZE(szSearchpath), pszFolderpath, L"*");
     }
 
     // Initialize search for files in folder
@@ -181,9 +180,9 @@ BOOL BuildFilesInDir_Hash(
         }
 
         szSearchpath[0] = 0;
-        if(PathCombine(szSearchpath, pszFolderpath, findData.cFileName) == NULL)
+        if (FAILED(PathCchCombine(szSearchpath, ARRAYSIZE(szSearchpath), pszFolderpath, findData.cFileName) == NULL))
         {
-            logerr(L"PathCombine() failed for %s and %s", pszFolderpath, findData.cFileName);
+            logerr(L"PathCchCombine() failed for %s and %s", pszFolderpath, findData.cFileName);
             goto error_return;
         }
 
@@ -335,16 +334,16 @@ static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
 
     BOOL fRetVal = TRUE;
 
-    WCHAR pszFilepath[MAX_PATH];
-    if(PathCombine(pszFilepath, pFileInfo->szPath, pFileInfo->szFilename) == NULL)
+    WCHAR szFilepath[MAX_PATH];
+    if (FAILED(PathCchCombine(szFilepath, ARRAYSIZE(szFilepath), pFileInfo->szPath, pFileInfo->szFilename) == NULL))
     {
-        logerr(L"PathCombine() failed for %s + %s", pFileInfo->szPath, pFileInfo->szFilename);
+        logerr(L"PathCchCombine() failed for %s + %s", pFileInfo->szPath, pFileInfo->szFilename);
         fRetVal = FALSE;
         goto done;
     }
 
-    loginfo(L"Deleting file = %s", pszFilepath);
-    if(!DeleteFile(pszFilepath))
+    loginfo(L"Deleting file = %s", szFilepath);
+    if(!DeleteFile(szFilepath))
     {
         logerr(L"DeleteFile failed, err: %u", GetLastError());
         fRetVal = FALSE;
