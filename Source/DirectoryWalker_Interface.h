@@ -30,6 +30,9 @@ typedef struct _DirectoryInfo
     // Was hash comapre used when this DIRINFO was built?
     BOOL fHashCompare;
 
+	// When deleting files, should empty folders be deleted?
+	BOOL fDeleteEmptyDirs;
+
     // Use a hashtable to store file list.
     // Key is the filename, value is a FILEINFO structure - if hash compare is turned OFF
     // Key is hash string, value is a PCHL_LLIST that is the

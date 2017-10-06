@@ -183,6 +183,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                         PFILEINFO *ppFiles;
                         if(GetSelectedLvItemsText_Hash(uiInfo.hLvLeft, &ppFiles, &nItemsSel))
                         {
+							uiInfo.pLeftDirInfo->fDeleteEmptyDirs = (IsDlgButtonChecked(hDlg, IDC_CHK_DELEMPTYDIRS) == BST_CHECKED);
                             fSucceeded = DeleteFilesInDir(uiInfo.pLeftDirInfo, ppFiles, nItemsSel, uiInfo.pRightDirInfo);
                             free(ppFiles);
                             ppFiles = NULL;
@@ -193,6 +194,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                         PWSTR paszFiles;
                         if(GetSelectedLvItemsText(uiInfo.hLvLeft, &paszFiles, &nItemsSel, MAX_PATH))
                         {
+							uiInfo.pLeftDirInfo->fDeleteEmptyDirs = (IsDlgButtonChecked(hDlg, IDC_CHK_DELEMPTYDIRS) == BST_CHECKED);
                             fSucceeded = DeleteFilesInDir(uiInfo.pLeftDirInfo, paszFiles, nItemsSel, uiInfo.pRightDirInfo);
                             free(paszFiles);
                             paszFiles = NULL;
@@ -226,6 +228,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                         PFILEINFO *ppFiles;
                         if(GetSelectedLvItemsText_Hash(uiInfo.hLvRight, &ppFiles, &nItemsSel))
                         {
+							uiInfo.pRightDirInfo->fDeleteEmptyDirs = (IsDlgButtonChecked(hDlg, IDC_CHK_DELEMPTYDIRS) == BST_CHECKED);
                             fSucceeded = DeleteFilesInDir(uiInfo.pRightDirInfo, ppFiles, nItemsSel, uiInfo.pLeftDirInfo);
                             free(ppFiles);
                             ppFiles = NULL;
@@ -236,6 +239,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                         PWSTR paszFiles;
                         if(GetSelectedLvItemsText(uiInfo.hLvRight, &paszFiles, &nItemsSel, MAX_PATH))
                         {
+							uiInfo.pRightDirInfo->fDeleteEmptyDirs = (IsDlgButtonChecked(hDlg, IDC_CHK_DELEMPTYDIRS) == BST_CHECKED);
                             fSucceeded = DeleteFilesInDir(uiInfo.pRightDirInfo, paszFiles, nItemsSel, uiInfo.pLeftDirInfo);
                             free(paszFiles);
                             paszFiles = NULL;
@@ -258,6 +262,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                     if(uiInfo.pLeftDirInfo != NULL)
                     {
                         // NULL check for the second parameter is in the callee
+						uiInfo.pLeftDirInfo->fDeleteEmptyDirs = (IsDlgButtonChecked(hDlg, IDC_CHK_DELEMPTYDIRS) == BST_CHECKED);
                         DeleteDupFilesInDir(uiInfo.pLeftDirInfo, uiInfo.pRightDirInfo);
                         uiInfo.iFSpecState_Left = FSPEC_STATE_TOUPDATE;
 
@@ -277,6 +282,7 @@ BOOL CALLBACK FolderDiffDP(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam
                     if(uiInfo.pRightDirInfo != NULL)
                     {
                         // NULL check for the second parameter is in the callee
+						uiInfo.pRightDirInfo->fDeleteEmptyDirs = (IsDlgButtonChecked(hDlg, IDC_CHK_DELEMPTYDIRS) == BST_CHECKED);
                         DeleteDupFilesInDir(uiInfo.pRightDirInfo, uiInfo.pLeftDirInfo);
                         uiInfo.iFSpecState_Right = FSPEC_STATE_TOUPDATE;
 

@@ -12,3 +12,4 @@
 
 int StringSizeBytes(_In_ PCWSTR pwsz);
 BOOL IsFileFolderBanned(_In_z_ PWSTR pszFilename, _In_ int nMaxChars);
+BOOL IsDirectoryEmpty(_In_z_ PCWSTR pszPath);
