@@ -370,10 +370,9 @@ void ClearFilesDupFlag_NoHash(_In_ PDIRINFO pDirInfo)
         }
         else
         {
-            WCHAR* pszKey;
             PFILEINFO pFileInfo;
-            int nKeySize, nValSize;
-            while(SUCCEEDED(CHL_DsGetNextHT(&itr, &pszKey, &nKeySize, &pFileInfo, &nValSize, TRUE)))
+            int nValSize;
+            while(SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, &nValSize, TRUE)))
             {
                 ClearDuplicateAttr(pFileInfo);
             }
@@ -457,10 +456,9 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
         goto error_return;
     }
 
-    WCHAR* pszFilename = NULL;
     PFILEINFO pFileInfo = NULL;
     PFILEINFO pPrevDupFileInfo = NULL;
-    while(SUCCEEDED(CHL_DsGetNextHT(&itr, &pszFilename, NULL, &pFileInfo, NULL, TRUE)))
+    while(SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, NULL, TRUE)))
     {
         // The hashtable iterator expects the currently found entry
         // not to be removed until we move to the next entry. Hence,
@@ -570,9 +568,8 @@ void PrintFilesInDir_NoHash(_In_ PDIRINFO pDirInfo)
 
     wprintf(L"%s\n", pDirInfo->pszPath);
 
-    WCHAR* pszFilename = NULL;
     PFILEINFO pFileInfo = NULL;
-    while(SUCCEEDED(CHL_DsGetNextHT(&itr, &pszFilename, NULL, &pFileInfo, NULL, TRUE)))
+    while(SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, NULL, TRUE)))
     {
         wprintf(L"%10u %c %1d %s\n", 
             pFileInfo->llFilesize.LowPart,
