@@ -292,7 +292,7 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
         goto error_return;
     }
 
-    char* pszLeftFile;
+    WCHAR* pszLeftFile;
     PFILEINFO pLeftFile, pRightFile;
     int nLeftKeySize;
 
@@ -370,7 +370,7 @@ void ClearFilesDupFlag_NoHash(_In_ PDIRINFO pDirInfo)
         }
         else
         {
-            char* pszKey;
+            WCHAR* pszKey;
             PFILEINFO pFileInfo;
             int nKeySize, nValSize;
             while(SUCCEEDED(CHL_DsGetNextHT(&itr, &pszKey, &nKeySize, &pFileInfo, &nValSize, TRUE)))
@@ -457,7 +457,7 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
         goto error_return;
     }
 
-    char* pszFilename = NULL;
+    WCHAR* pszFilename = NULL;
     PFILEINFO pFileInfo = NULL;
     PFILEINFO pPrevDupFileInfo = NULL;
     while(SUCCEEDED(CHL_DsGetNextHT(&itr, &pszFilename, NULL, &pFileInfo, NULL, TRUE)))
@@ -570,7 +570,7 @@ void PrintFilesInDir_NoHash(_In_ PDIRINFO pDirInfo)
 
     wprintf(L"%s\n", pDirInfo->pszPath);
 
-    char* pszFilename = NULL;
+    WCHAR* pszFilename = NULL;
     PFILEINFO pFileInfo = NULL;
     while(SUCCEEDED(CHL_DsGetNextHT(&itr, &pszFilename, NULL, &pFileInfo, NULL, TRUE)))
     {
