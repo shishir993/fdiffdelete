@@ -419,6 +419,7 @@ done:
 
 static BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDeleteFrom, _In_opt_ PDIRINFO pUpdateDir)
 {
+	SB_ASSERT(pFileToDelete->fIsDirectory == FALSE);
     if(pUpdateDir)
     {
 		// Find this file in the other directory and update that file info
@@ -460,6 +461,11 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
     PFILEINFO pPrevDupFileInfo = NULL;
     while(SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, NULL, TRUE)))
     {
+		if (pFileInfo->fIsDirectory == TRUE)
+		{
+			continue;
+		}
+
         // The hashtable iterator expects the currently found entry
         // not to be removed until we move to the next entry. Hence,
         // this logic with previous pointer.
@@ -511,7 +517,10 @@ BOOL DeleteFilesInDir_NoHash(
         if(SUCCEEDED(CHL_DsFindHT(pDirDeleteFrom->phtFiles, (PCVOID)paszFileNamesToDelete,
 			StringSizeBytes(paszFileNamesToDelete), &pFileToDelete, NULL, TRUE)))
         {
-            _DeleteFileUpdateDir(pFileToDelete, pDirDeleteFrom, pDirToUpdate);
+			if (pFileToDelete->fIsDirectory == FALSE)
+			{
+				_DeleteFileUpdateDir(pFileToDelete, pDirDeleteFrom, pDirToUpdate);
+			}
         }
         else
         {

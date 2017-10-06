@@ -332,6 +332,8 @@ error_return:
 
 static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
 {
+	SB_ASSERT(pFileInfo->fIsDirectory == FALSE);
+
     BOOL fRetVal = TRUE;
 
     WCHAR pszFilepath[MAX_PATH];
@@ -449,7 +451,7 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
                 continue;
             }
 
-            if(IsDuplicateFile(pFileInfo))
+            if ((pFileInfo->fIsDirectory == FALSE) && (IsDuplicateFile(pFileInfo) == TRUE))
             {
                 _DeleteFile(pDirDeleteFrom, pFileInfo);
 
@@ -530,7 +532,11 @@ BOOL DeleteFilesInDir_Hash(
     loginfo(L"Deleting %d files from %s", nFiles, pDirDeleteFrom->pszPath);
     while(index < nFiles)
     {
-        pFileToDelete = paFilesToDelete[index];
+        pFileToDelete = paFilesToDelete[index++];
+		if (pFileToDelete->fIsDirectory == TRUE)
+		{
+			continue;
+		}
 
         HashValueToString(pFileToDelete->abHash, szKey);
         nKeySize = strnlen_s(szKey, ARRAYSIZE(szKey)) + 1;
@@ -549,7 +555,7 @@ BOOL DeleteFilesInDir_Hash(
                 // File found in from-dir
                 // If file is present in to-update-dir, then clear it's duplicate flag
                 // TODO: Better logic; don't check this inside the loop, every iteration
-                if(pDirToUpdate)
+                if (pDirToUpdate && (pFileToDelete->fIsDirectory == FALSE))
                 {
                     PCHL_LLIST pRightList;
                     if(SUCCEEDED(CHL_DsFindHT(pDirToUpdate->phtFiles, szKey, nKeySize, &pRightList, NULL, TRUE)))
@@ -565,7 +571,7 @@ BOOL DeleteFilesInDir_Hash(
             }
 
             // Delete file from file system and remove from linkedlist (and hashtable)
-            if(_DeleteFile(pDirDeleteFrom, pFileToDelete))
+            if (_DeleteFile(pDirDeleteFrom, pFileToDelete) == TRUE)
             {
                 --(pLeftList->nCurNodes);
 
@@ -580,8 +586,6 @@ BOOL DeleteFilesInDir_Hash(
         {
             logwarn(L"Couldn't find file in dir");
         }
-
-        ++index;
     }
 
     return TRUE;
