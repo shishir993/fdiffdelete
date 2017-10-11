@@ -279,10 +279,11 @@ void GetDupTypeString(_In_ PFILEINFO pFileInfo, _Inout_z_ PWSTR pszDupType)
     }   
 }
 
-BOOL CompareFilesByName(_In_ PVOID pLeftFile, _In_ PVOID pRightFile)
+int CompareFilesByName(_In_ PVOID pLeftFile, _In_ PVOID pRightFile)
 {
     PFILEINFO pLeft = (PFILEINFO)pLeftFile;
     PFILEINFO pRight = (PFILEINFO)pRightFile;
 
-    return (_wcsnicmp(pLeft->szFilename, pRight->szFilename, ARRAYSIZE(pLeft->szFilename)) == 0);
+    size_t count = wcsnlen(pLeft->szFilename, ARRAYSIZE(pLeft->szFilename));
+    return _wcsnicmp(pLeft->szFilename, pRight->szFilename, count);
 }

@@ -19,5 +19,5 @@ void SbAssert(const char* pszFile, UINT uLine)
         __asm int 3
     }
 
-	exit(CE_ASSERT_FAILED);
+    exit(CE_ASSERT_FAILED);
 }
