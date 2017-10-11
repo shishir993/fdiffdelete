@@ -24,9 +24,6 @@ static BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES
 static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo);
 static BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDeleteFrom, _In_opt_ PDIRINFO pUpdateDir);
 
-static void _AddToFoldersSeen(_Inout_ PCHL_HTABLE phtFoldersSeen, _In_ PFILEINFO pFile);
-static void _DeleteEmptyFolders(_Inout_ PCHL_HTABLE phtFoldersSeen);
-
 static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIRINFO* ppDirInfo)
 {
     HRESULT hr = S_OK;
@@ -452,24 +449,17 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
         goto error_return;
     }
 
-    PCHL_HTABLE phtFoldersSeen = NULL;
-    if (pDirDeleteFrom->fDeleteEmptyDirs)
+    PCHL_HTABLE phtFoldersSeen;
+    if (FAILED(DelEmptyFolders_Init(pDirDeleteFrom, &phtFoldersSeen)))
     {
-        int nEstEntries = min(1, pDirDeleteFrom->nDirs);
-        if (FAILED(CHL_DsCreateHT(&phtFoldersSeen, nEstEntries, CHL_KT_WSTRING, CHL_VT_INT32, FALSE)))
-        {
-            goto error_return;
-        }
+        goto error_return;
     }
 
     PFILEINFO pFileInfo = NULL;
     PFILEINFO pPrevDupFileInfo = NULL;
     while (SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, NULL, TRUE)))
     {
-        if (phtFoldersSeen != NULL)
-        {
-            _AddToFoldersSeen(phtFoldersSeen, pFileInfo);
-        }
+        DelEmptyFolders_Add(phtFoldersSeen, pFileInfo);
 
         if (pFileInfo->fIsDirectory == TRUE)
         {
@@ -497,17 +487,11 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
         pPrevDupFileInfo = NULL;
     }
 
-    if (phtFoldersSeen != NULL)
-    {
-        _DeleteEmptyFolders(phtFoldersSeen);
-    }
+    DelEmptyFolders_Delete(phtFoldersSeen);
     return TRUE;
 
 error_return:
-    if (phtFoldersSeen != NULL)
-    {
-        phtFoldersSeen->Destroy(phtFoldersSeen);
-    }
+    DelEmptyFolders_Delete(phtFoldersSeen);
     return FALSE;
 }
 
@@ -528,14 +512,10 @@ BOOL DeleteFilesInDir_NoHash(
     int index = 0;
     loginfo(L"Deleting %d files from %s", nFileNames, pDirDeleteFrom->pszPath);
 
-    PCHL_HTABLE phtFoldersSeen = NULL;
-    if (pDirDeleteFrom->fDeleteEmptyDirs)
+    PCHL_HTABLE phtFoldersSeen;
+    if (FAILED(DelEmptyFolders_Init(pDirDeleteFrom, &phtFoldersSeen)))
     {
-        int nEstEntries = min(1, pDirDeleteFrom->nDirs);
-        if (FAILED(CHL_DsCreateHT(&phtFoldersSeen, nEstEntries, CHL_KT_WSTRING, CHL_VT_INT32, FALSE)))
-        {
-            return FALSE;
-        }
+        return FALSE;
     }
 
     while (index < nFileNames)
@@ -544,10 +524,7 @@ BOOL DeleteFilesInDir_NoHash(
         if (SUCCEEDED(CHL_DsFindHT(pDirDeleteFrom->phtFiles, (PCVOID)paszFileNamesToDelete,
             StringSizeBytes(paszFileNamesToDelete), &pFileToDelete, NULL, TRUE)))
         {
-            if (phtFoldersSeen != NULL)
-            {
-                _AddToFoldersSeen(phtFoldersSeen, pFileToDelete);
-            }
+            DelEmptyFolders_Add(phtFoldersSeen, pFileToDelete);
 
             if (pFileToDelete->fIsDirectory == FALSE)
             {
@@ -562,10 +539,7 @@ BOOL DeleteFilesInDir_NoHash(
         ++index;
     }
 
-    if (phtFoldersSeen != NULL)
-    {
-        _DeleteEmptyFolders(phtFoldersSeen);
-    }
+    DelEmptyFolders_Delete(phtFoldersSeen);
     return TRUE;
 }
 
@@ -689,81 +663,4 @@ BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES_WITHIN
         }
     }
     return FALSE;
-}
-
-void _AddToFoldersSeen(_Inout_ PCHL_HTABLE phtFoldersSeen, _In_ PFILEINFO pFile)
-{
-    WCHAR szDir[MAX_PATH];
-    HRESULT hr;
-    if (pFile->fIsDirectory == TRUE)
-    {
-        hr = PathCchCombine(szDir, ARRAYSIZE(szDir), pFile->szPath, pFile->szFilename);
-    }
-    else
-    {
-        hr = StringCchCopy(szDir, ARRAYSIZE(szDir), pFile->szPath);
-    }
-
-    if (SUCCEEDED(hr))
-    {
-        hr = phtFoldersSeen->Insert(phtFoldersSeen, (PCVOID)szDir, 0, 0, 0);
-    }
-
-    if (FAILED(hr))
-    {
-        logwarn(L"Failed to record as a seen dir, hr: %x, %s\\%s", hr, pFile->szPath, pFile->szFilename);
-    }
-}
-
-void _DeleteEmptyFolders(_Inout_ PCHL_HTABLE phtFoldersSeen)
-{
-    int nFoldersRemoved;
-    do
-    {
-        nFoldersRemoved = 0;
-
-        CHL_HT_ITERATOR itr;
-        HRESULT hr = phtFoldersSeen->InitIterator(phtFoldersSeen, &itr);
-        if (FAILED(hr))
-        {
-            logwarn(L"Error deleting empty dirs, hr: %x", hr);
-            goto fend;
-        }
-
-        PCWSTR pszDir = NULL;
-        PCWSTR pszPrevDir = NULL;
-        if (FAILED(phtFoldersSeen->GetNext(&itr, &pszDir, NULL, NULL, NULL, TRUE)))
-        {
-            break;
-        }
-
-        do
-        {
-            // The hashtable iterator expects the currently found entry
-            // not to be removed until we move to the next entry. Hence,
-            // this logic with previous pointer.
-            if (pszPrevDir != NULL)
-            {
-                phtFoldersSeen->Remove(phtFoldersSeen, (PCVOID)pszPrevDir, 0);
-                pszPrevDir = NULL;
-            }
-
-            if (IsDirectoryEmpty(pszDir) == TRUE)
-            {
-                pszPrevDir = pszDir;
-                hr = RemoveDirectory(pszDir) ? S_OK : HRESULT_FROM_WIN32(GetLastError());
-                loginfo(L"Attempt to remove empty dir, hr: %x, %s", hr, pszDir);
-                ++nFoldersRemoved;
-            }
-
-        } while ((SUCCEEDED(phtFoldersSeen->GetNext(&itr, &pszDir, NULL, NULL, NULL, TRUE))));
-
-        if (pszPrevDir != NULL)
-        {
-            phtFoldersSeen->Remove(phtFoldersSeen, (PCVOID)pszPrevDir, 0);
-        }
-    } while (0 < nFoldersRemoved);
-
-fend:
-    phtFoldersSeen->Destroy(phtFoldersSeen);
 }
