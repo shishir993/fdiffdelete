@@ -29,25 +29,25 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR szCmdLi
     DBG_UNREFERENCED_PARAMETER(szCmdLine);
     DBG_UNREFERENCED_PARAMETER(hPrevInstance);
 
-	g_hMainInstance = hInstance;
+    g_hMainInstance = hInstance;
 
     // Initialize common controls
-	InitCommonControls();
+    InitCommonControls();
 
-    if(!CreateConsoleWindow())
+    if (!CreateConsoleWindow())
     {
         MessageBox(NULL, L"Cannot create console window.", L"Warning", MB_OK | MB_ICONWARNING);
     }
 
     INT_PTR iptr = DialogBox(hInstance, MAKEINTRESOURCE(IDD_DLG_FDIFF), NULL, FolderDiffDP);
-    if(iptr == -1)
+    if (iptr == -1)
     {
         DWORD dw = GetLastError();
         MessageBox(NULL, L"Cannot create dialog box.", L"Error", MB_OK | MB_ICONERROR);
         DebugBreak();
     }
-	
-	return 0;
+
+    return 0;
 }
 
 static BOOL CreateConsoleWindow()
@@ -56,7 +56,7 @@ static BOOL CreateConsoleWindow()
 
     __try
     {
-        if(AllocConsole())
+        if (AllocConsole())
         {
             // Thanks to: http://dslweb.nwnexus.com/~ast/dload/guicon.htm and MSDN
             FILE *fp = NULL;
@@ -64,28 +64,28 @@ static BOOL CreateConsoleWindow()
             HANDLE hInputHandle = GetStdHandle(STD_INPUT_HANDLE);
             HANDLE hErrorHandle = GetStdHandle(STD_ERROR_HANDLE);
 
-            if(g_hStdOut == INVALID_HANDLE_VALUE || hInputHandle == INVALID_HANDLE_VALUE ||
+            if (g_hStdOut == INVALID_HANDLE_VALUE || hInputHandle == INVALID_HANDLE_VALUE ||
                 hErrorHandle == INVALID_HANDLE_VALUE)
             {
                 __leave;
             }
 
-            if( (iConOutHandle = _open_osfhandle((intptr_t)g_hStdOut, _O_APPEND|_O_TEXT)) == -1 )
+            if ((iConOutHandle = _open_osfhandle((intptr_t)g_hStdOut, _O_APPEND | _O_TEXT)) == -1)
                 __leave;
 
-			fp = _fdopen(iConOutHandle, "w+");
-			*stdout = *fp;
+            fp = _fdopen(iConOutHandle, "w+");
+            *stdout = *fp;
 
-            if( (iConInHandle = _open_osfhandle((intptr_t)hInputHandle, _O_RDONLY|_O_TEXT)) == -1 )
+            if ((iConInHandle = _open_osfhandle((intptr_t)hInputHandle, _O_RDONLY | _O_TEXT)) == -1)
                 __leave;
 
-			fp = _fdopen(iConInHandle, "r");
-			*stdin = *fp;
+            fp = _fdopen(iConInHandle, "r");
+            *stdin = *fp;
 
-            if( (iConErrHandle = _open_osfhandle((intptr_t)hErrorHandle, _O_APPEND|_O_TEXT)) == -1 )
+            if ((iConErrHandle = _open_osfhandle((intptr_t)hErrorHandle, _O_APPEND | _O_TEXT)) == -1)
                 __leave;
 
-            fp = _fdopen( iConErrHandle, "w+" );
+            fp = _fdopen(iConErrHandle, "w+");
             *stderr = *fp;
 
             fError = FALSE;
@@ -93,13 +93,13 @@ static BOOL CreateConsoleWindow()
     }
     __finally
     {
-        if(fError)
+        if (fError)
         {
-			if (iConInHandle != -1) { _close(iConInHandle); iConInHandle = -1; }
-			if (iConOutHandle != -1) { _close(iConOutHandle); iConOutHandle = -1; }
-			if (iConErrHandle != -1) { _close(iConErrHandle); iConErrHandle = -1; }
-			FreeConsole();
-		}
+            if (iConInHandle != -1) { _close(iConInHandle); iConInHandle = -1; }
+            if (iConOutHandle != -1) { _close(iConOutHandle); iConOutHandle = -1; }
+            if (iConErrHandle != -1) { _close(iConErrHandle); iConErrHandle = -1; }
+            FreeConsole();
+        }
     }
 
     return !fError;

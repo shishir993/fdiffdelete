@@ -32,7 +32,7 @@ typedef struct _FileInfo {
     // because otherwise the directory must hold an additional
     // list of duplicate files.
     BYTE bDupInfo;
-    
+
     LARGE_INTEGER llFilesize;
     BYTE abHash[HASHLEN_SHA1];
     SYSTEMTIME stModifiedTime;

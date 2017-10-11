@@ -16,13 +16,13 @@ BOOL GetTextFromEditControl(_In_ HWND hEditControl, _Inout_z_ WCHAR* pszFolderpa
 BOOL IsMenuItemChecked(_In_ HMENU hMenu, _In_ UINT uiItemId);
 
 BOOL GetSelectedLvItemsText(
-    _In_ HWND hListView, 
-    _Out_ PWSTR *ppaszFiles, 
-    _Out_ PINT pnItems, 
+    _In_ HWND hListView,
+    _Out_ PWSTR *ppaszFiles,
+    _Out_ PINT pnItems,
     _In_ int nMaxCharsEachItemText);
 
 BOOL GetSelectedLvItemsText_Hash(
-    _In_ HWND hListView, 
+    _In_ HWND hListView,
     _Out_ PFILEINFO **pppaFileInfo,
     _Out_ PINT pnItems);
 

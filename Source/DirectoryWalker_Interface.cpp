@@ -13,7 +13,7 @@
 
 void DestroyDirInfo(_In_ PDIRINFO pDirInfo)
 {
-    if(pDirInfo->fHashCompare)
+    if (pDirInfo->fHashCompare)
     {
         DestroyDirInfo_Hash(pDirInfo);
     }
@@ -26,7 +26,7 @@ void DestroyDirInfo(_In_ PDIRINFO pDirInfo)
 BOOL BuildDirTree(_In_z_ PCWSTR pszRootpath, _In_ BOOL fCompareHashes, _Out_ PDIRINFO* ppRootDir)
 {
     BOOL fRetVal;
-    if(fCompareHashes)
+    if (fCompareHashes)
     {
         fRetVal = BuildDirTree_Hash(pszRootpath, ppRootDir);
     }
@@ -39,13 +39,13 @@ BOOL BuildDirTree(_In_z_ PCWSTR pszRootpath, _In_ BOOL fCompareHashes, _Out_ PDI
 
 // Build the list of files in the given folder
 BOOL BuildFilesInDir(
-    _In_ PCWSTR pszFolderpath, 
-    _In_opt_ PCHL_QUEUE pqDirsToTraverse, 
+    _In_ PCWSTR pszFolderpath,
+    _In_opt_ PCHL_QUEUE pqDirsToTraverse,
     _In_ BOOL fCompareHashes,
     _Inout_ PDIRINFO* ppDirInfo)
 {
     BOOL fRetVal;
-    if(fCompareHashes)
+    if (fCompareHashes)
     {
         fRetVal = BuildFilesInDir_Hash(pszFolderpath, pqDirsToTraverse, ppDirInfo);
     }
@@ -59,23 +59,23 @@ BOOL BuildFilesInDir(
 // Given two DIRINFO objects, compare the files in them and set each file's
 // duplicate flag to indicate that the file is present in both dirs.
 BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
-{ 
+{
     // Both dirs must have been built with or without hash compare
     int numHashEnabled = 0;
-    if(pLeftDir->fHashCompare)
+    if (pLeftDir->fHashCompare)
         ++numHashEnabled;
 
-    if(pRightDir->fHashCompare)
+    if (pRightDir->fHashCompare)
         ++numHashEnabled;
 
-    if(numHashEnabled == 1)
+    if (numHashEnabled == 1)
     {
         logerr(L"Only one of the dirs has hash compare enabled!");
         return FALSE;
     }
 
     BOOL fRetVal;
-    if(numHashEnabled == 2)
+    if (numHashEnabled == 2)
     {
         fRetVal = CompareDirsAndMarkFiles_Hash(pLeftDir, pRightDir);
     }
@@ -90,7 +90,7 @@ BOOL CompareDirsAndMarkFiles(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDir)
 // Clear the duplicate flag of all files in the specified directory
 void ClearFilesDupFlag(_In_ PDIRINFO pDirInfo)
 {
-    if(pDirInfo->fHashCompare)
+    if (pDirInfo->fHashCompare)
     {
         ClearFilesDupFlag_Hash(pDirInfo);
     }
@@ -107,20 +107,20 @@ BOOL DeleteDupFilesInDir(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdat
 {
     // Both dirs must have been built with or without hash compare
     int numHashEnabled = 0;
-    if(pDirDeleteFrom->fHashCompare)
+    if (pDirDeleteFrom->fHashCompare)
         ++numHashEnabled;
 
-    if(pDirToUpdate->fHashCompare)
+    if (pDirToUpdate->fHashCompare)
         ++numHashEnabled;
 
-    if(numHashEnabled == 1)
+    if (numHashEnabled == 1)
     {
         logerr(L"Only one of the dirs has hash compare enabled!");
         return FALSE;
     }
 
     BOOL fRetVal;
-    if(numHashEnabled == 2)
+    if (numHashEnabled == 2)
     {
         fRetVal = DeleteDupFilesInDir_Hash(pDirDeleteFrom, pDirToUpdate);
     }
@@ -136,9 +136,9 @@ BOOL DeleteDupFilesInDir(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdat
 // from the pDirDeleteFrom directory and update the other directory files'. The files to
 // be deleted are specified in a list of strings that are the file names.
 BOOL DeleteFilesInDir(
-    _In_ PDIRINFO pDirDeleteFrom, 
-    _In_ PCWSTR paszFileNamesToDelete, 
-    _In_ int nFileNames, 
+    _In_ PDIRINFO pDirDeleteFrom,
+    _In_ PCWSTR paszFileNamesToDelete,
+    _In_ int nFileNames,
     _In_ PDIRINFO pDirToUpdate)
 {
     SB_ASSERT(!pDirDeleteFrom->fHashCompare && (pDirToUpdate == NULL || !pDirToUpdate->fHashCompare));
@@ -146,9 +146,9 @@ BOOL DeleteFilesInDir(
 }
 
 BOOL DeleteFilesInDir(
-    _In_ PDIRINFO pDirDeleteFrom, 
-    _In_ PFILEINFO *paFilesToDelete, 
-    _In_ int nFiles, 
+    _In_ PDIRINFO pDirDeleteFrom,
+    _In_ PFILEINFO *paFilesToDelete,
+    _In_ int nFiles,
     _In_ PDIRINFO pDirToUpdate)
 {
     SB_ASSERT(pDirDeleteFrom->fHashCompare && (pDirToUpdate == NULL || pDirToUpdate->fHashCompare));
@@ -159,7 +159,7 @@ BOOL DeleteFilesInDir(
 // file listing of each directory
 void PrintDirTree(_In_ PDIRINFO pRootDir)
 {
-    if(pRootDir->fHashCompare)
+    if (pRootDir->fHashCompare)
     {
         PrintDirTree_Hash(pRootDir);
     }
@@ -172,7 +172,7 @@ void PrintDirTree(_In_ PDIRINFO pRootDir)
 // Print files in the folder, one on each line. End on a blank line.
 void PrintFilesInDir(_In_ PDIRINFO pDirInfo)
 {
-    if(pDirInfo->fHashCompare)
+    if (pDirInfo->fHashCompare)
     {
         PrintFilesInDir_Hash(pDirInfo);
     }

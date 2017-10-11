@@ -28,7 +28,7 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIR
 {
     HRESULT hr = S_OK;
     PDIRINFO pDirInfo = (PDIRINFO)malloc(sizeof(DIRINFO));
-    if(pDirInfo == NULL)
+    if (pDirInfo == NULL)
     {
         hr = E_OUTOFMEMORY;
         goto error_return;
@@ -37,7 +37,7 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIR
     ZeroMemory(pDirInfo, sizeof(*pDirInfo));
     wcscpy_s(pDirInfo->pszPath, ARRAYSIZE(pDirInfo->pszPath), pszFolderpath);
     int nEstEntries = fRecursive ? 2048 : 256;
-    if(FAILED(CHL_DsCreateHT(&pDirInfo->phtFiles, nEstEntries, CHL_KT_WSTRING, CHL_VT_POINTER, TRUE)))
+    if (FAILED(CHL_DsCreateHT(&pDirInfo->phtFiles, nEstEntries, CHL_KT_WSTRING, CHL_VT_POINTER, TRUE)))
     {
         logerr(L"Couldn't create hash table for dir: %s", pszFolderpath);
         hr = E_FAIL;
@@ -57,7 +57,7 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIR
 
 error_return:
     *ppDirInfo = NULL;
-    if(pDirInfo != NULL)
+    if (pDirInfo != NULL)
     {
         DestroyDirInfo_NoHash(pDirInfo);
     }
@@ -68,7 +68,7 @@ void DestroyDirInfo_NoHash(_In_ PDIRINFO pDirInfo)
 {
     SB_ASSERT(pDirInfo);
 
-    if(pDirInfo->phtFiles != NULL)
+    if (pDirInfo->phtFiles != NULL)
     {
         CHL_DsDestroyHT(pDirInfo->phtFiles);
     }
@@ -82,7 +82,7 @@ void DestroyDirInfo_NoHash(_In_ PDIRINFO pDirInfo)
 BOOL BuildDirTree_NoHash(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
 {
     PCHL_QUEUE pqDirsToTraverse;
-    if(FAILED(CHL_DsCreateQ(&pqDirsToTraverse, CHL_VT_POINTER, 20)))
+    if (FAILED(CHL_DsCreateQ(&pqDirsToTraverse, CHL_VT_POINTER, 20)))
     {
         logerr(L"Could not create queue for BFS. Rootpath: %s", pszRootpath);
         goto error_return;
@@ -93,17 +93,17 @@ BOOL BuildDirTree_NoHash(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
     // Init the first dir to traverse. 
     // ** IMP: pFirst must be NULL here so that a new object is created in callee
     PDIRINFO pFirstDir = NULL;
-    if(!BuildFilesInDir_NoHash(pszRootpath, pqDirsToTraverse, &pFirstDir))
+    if (!BuildFilesInDir_NoHash(pszRootpath, pqDirsToTraverse, &pFirstDir))
     {
         logerr(L"Could not build files in dir: %s", pszRootpath);
         goto error_return;
     }
 
     PDIRINFO pDirToTraverse;
-    while(SUCCEEDED(pqDirsToTraverse->Delete(pqDirsToTraverse, &pDirToTraverse, NULL, FALSE)))
+    while (SUCCEEDED(pqDirsToTraverse->Delete(pqDirsToTraverse, &pDirToTraverse, NULL, FALSE)))
     {
         loginfo(L"Continuing traversal in dir: %s", pDirToTraverse->pszPath);
-        if(!BuildFilesInDir_NoHash(pDirToTraverse->pszPath, pqDirsToTraverse, &pFirstDir))
+        if (!BuildFilesInDir_NoHash(pDirToTraverse->pszPath, pqDirsToTraverse, &pFirstDir))
         {
             logerr(L"Could not build files in dir: %s. Continuing...", pDirToTraverse->pszPath);
         }
@@ -115,7 +115,7 @@ BOOL BuildDirTree_NoHash(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir)
     return TRUE;
 
 error_return:
-    if(pqDirsToTraverse)
+    if (pqDirsToTraverse)
     {
         pqDirsToTraverse->Destroy(pqDirsToTraverse);
     }
@@ -125,8 +125,8 @@ error_return:
 
 // Build the list of files in the given folder.
 BOOL BuildFilesInDir_NoHash(
-    _In_ PCWSTR pszFolderpath, 
-    _In_opt_ PCHL_QUEUE pqDirsToTraverse, 
+    _In_ PCWSTR pszFolderpath,
+    _In_opt_ PCHL_QUEUE pqDirsToTraverse,
     _Inout_ PDIRINFO* ppDirInfo)
 {
     SB_ASSERT(pszFolderpath);
@@ -135,7 +135,7 @@ BOOL BuildFilesInDir_NoHash(
     HANDLE hFindFile = NULL;
 
     loginfo(L"Building dir: %s", pszFolderpath);
-    if(*ppDirInfo == NULL && FAILED(_Init(pszFolderpath, (pqDirsToTraverse != NULL), ppDirInfo)))
+    if (*ppDirInfo == NULL && FAILED(_Init(pszFolderpath, (pqDirsToTraverse != NULL), ppDirInfo)))
     {
         logerr(L"Init failed for dir: %s", pszFolderpath);
         goto error_return;
@@ -150,7 +150,7 @@ BOOL BuildFilesInDir_NoHash(
     wcscpy_s(szSearchpath, ARRAYSIZE(szSearchpath), pszFolderpath);
 
     int nLen = wcsnlen(pszFolderpath, MAX_PATH);
-    if(nLen > 2 && wcsncmp(pszFolderpath + nLen - 2, L"\\*", MAX_PATH) != 0)
+    if (nLen > 2 && wcsncmp(pszFolderpath + nLen - 2, L"\\*", MAX_PATH) != 0)
     {
         PathCchCombine(szSearchpath, ARRAYSIZE(szSearchpath), pszFolderpath, L"*");
     }
@@ -158,13 +158,13 @@ BOOL BuildFilesInDir_NoHash(
     // Initialize search for files in folder
     WIN32_FIND_DATA findData;
     hFindFile = FindFirstFile(szSearchpath, &findData);
-    if(hFindFile == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND)
+    if (hFindFile == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND)
     {
         // No files found under the folder. Just return.
         return TRUE;
     }
 
-    if(hFindFile == INVALID_HANDLE_VALUE)
+    if (hFindFile == INVALID_HANDLE_VALUE)
     {
         logerr(L"FindFirstFile().");
         goto error_return;
@@ -173,7 +173,7 @@ BOOL BuildFilesInDir_NoHash(
     do
     {
         // Skip banned files and folders
-        if(IsFileFolderBanned(findData.cFileName, ARRAYSIZE(findData.cFileName)))
+        if (IsFileFolderBanned(findData.cFileName, ARRAYSIZE(findData.cFileName)))
         {
             continue;
         }
@@ -186,18 +186,18 @@ BOOL BuildFilesInDir_NoHash(
         }
 
         PFILEINFO pFileInfo;
-        if(!CreateFileInfo(szSearchpath, FALSE, &pFileInfo))
+        if (!CreateFileInfo(szSearchpath, FALSE, &pFileInfo))
         {
             // Treat as warning and move on.
             logwarn(L"Unable to get file info for: %s", szSearchpath);
             continue;
         }
 
-        if(pFileInfo->fIsDirectory && pqDirsToTraverse)
+        if (pFileInfo->fIsDirectory && pqDirsToTraverse)
         {
             // If pqDirsToTraverse is not null, it means caller wants recursive directory traversal
             PDIRINFO pSubDir;
-            if(FAILED(_Init(szSearchpath, TRUE, &pSubDir)))
+            if (FAILED(_Init(szSearchpath, TRUE, &pSubDir)))
             {
                 logwarn(L"Unable to init dir info for: %s", szSearchpath);
                 free(pFileInfo);
@@ -205,7 +205,7 @@ BOOL BuildFilesInDir_NoHash(
             }
 
             // Insert pSubDir into the queue so that it will be traversed later
-            if(FAILED(pqDirsToTraverse->Insert(pqDirsToTraverse, pSubDir, sizeof pSubDir)))
+            if (FAILED(pqDirsToTraverse->Insert(pqDirsToTraverse, pSubDir, sizeof pSubDir)))
             {
                 logwarn(L"Unable to add sub dir [%s] to traversal queue, cur dir: %s", findData.cFileName, pszFolderpath);
                 free(pFileInfo);
@@ -230,7 +230,7 @@ BOOL BuildFilesInDir_NoHash(
                     StringSizeBytes(findData.cFileName), pFileInfo, sizeof pFileInfo));
             }
 
-            if(!fFileAdded)
+            if (!fFileAdded)
             {
                 logerr(L"Cannot add %s to file list: %s", (pFileInfo->fIsDirectory ? L"dir" : L"file"), findData.cFileName);
                 free(pFileInfo);
@@ -241,9 +241,9 @@ BOOL BuildFilesInDir_NoHash(
                 logdbg(L"Added %s: %s", (pFileInfo->fIsDirectory ? L"dir" : L"file"), findData.cFileName);
             }
         }
-    } while(FindNextFile(hFindFile, &findData));
+    } while (FindNextFile(hFindFile, &findData));
 
-    if(GetLastError() != ERROR_NO_MORE_FILES)
+    if (GetLastError() != ERROR_NO_MORE_FILES)
     {
         logerr(L"Failed in enumerating files in directory: %s", pszFolderpath);
         goto error_return;
@@ -253,12 +253,12 @@ BOOL BuildFilesInDir_NoHash(
     return TRUE;
 
 error_return:
-    if(hFindFile != INVALID_HANDLE_VALUE)
+    if (hFindFile != INVALID_HANDLE_VALUE)
     {
         FindClose(hFindFile);
     }
 
-    if(*ppDirInfo != NULL)
+    if (*ppDirInfo != NULL)
     {
         DestroyDirInfo_NoHash(*ppDirInfo);
         *ppDirInfo = NULL;
@@ -278,7 +278,7 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
     // If found, pass both to the CompareFileInfoAndMark().
 
     CHL_HT_ITERATOR itrLeft;
-    if(FAILED(CHL_DsInitIteratorHT(pLeftDir->phtFiles, &itrLeft)))
+    if (FAILED(CHL_DsInitIteratorHT(pLeftDir->phtFiles, &itrLeft)))
     {
         logerr(L"Cannot iterate through file list for dir: %s", pLeftDir->pszPath);
         goto error_return;
@@ -289,22 +289,22 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
     int nLeftKeySize;
 
     logdbg(L"Comparing dirs: %s and %s", pLeftDir->pszPath, pRightDir->pszPath);
-    while(SUCCEEDED(CHL_DsGetNextHT(&itrLeft, &pszLeftFile, &nLeftKeySize, &pLeftFile, NULL, TRUE)))
+    while (SUCCEEDED(CHL_DsGetNextHT(&itrLeft, &pszLeftFile, &nLeftKeySize, &pLeftFile, NULL, TRUE)))
     {
-        if(SUCCEEDED(CHL_DsFindHT(pRightDir->phtFiles, (void*)pszLeftFile, nLeftKeySize, &pRightFile, NULL, TRUE)))
+        if (SUCCEEDED(CHL_DsFindHT(pRightDir->phtFiles, (void*)pszLeftFile, nLeftKeySize, &pRightFile, NULL, TRUE)))
         {
             // Same file found in right dir, compare and mark as duplicate
-            if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
+            if (CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
                 logdbg(L"Duplicate %s: %s", (pLeftFile->fIsDirectory ? L"dir" : L"file"), pszLeftFile);
             }
         }
 
         int index = 0;
-        while((pRightFile = FindInDupWithinList(pLeftFile->szFilename, &pRightDir->stDupFilesInTree, &index)) != NULL)
+        while ((pRightFile = FindInDupWithinList(pLeftFile->szFilename, &pRightDir->stDupFilesInTree, &index)) != NULL)
         {
             // Same file found in right dir, compare and mark as duplicate
-            if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
+            if (CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
                 logdbg(L"DupWithin Duplicate %s: %s", (pLeftFile->fIsDirectory ? L"dir" : L"file"), pszLeftFile);
             }
@@ -312,7 +312,7 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
     }
 
     // See if dup within files are duplicate
-    for(int i = 0; i < pLeftDir->stDupFilesInTree.nCurFiles; ++i)
+    for (int i = 0; i < pLeftDir->stDupFilesInTree.nCurFiles; ++i)
     {
         // Check if this file is in the right dir by checking both its hashtable and the dupwithin list
         if (FAILED(CHL_DsReadRA(&pLeftDir->stDupFilesInTree.aFiles, i, &pLeftFile, NULL, TRUE)))
@@ -321,10 +321,10 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
         }
 
         // Hashtable first
-        if(SUCCEEDED(CHL_DsFindHT(pRightDir->phtFiles, pLeftFile->szFilename, StringSizeBytes(pLeftFile->szFilename), &pRightFile, NULL, TRUE)))
+        if (SUCCEEDED(CHL_DsFindHT(pRightDir->phtFiles, pLeftFile->szFilename, StringSizeBytes(pLeftFile->szFilename), &pRightFile, NULL, TRUE)))
         {
             // Same file found in right dir, compare and mark as duplicate
-            if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
+            if (CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
                 logdbg(L"Duplicate file: %s", pLeftFile->szFilename);
             }
@@ -332,10 +332,10 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
 
         // Now, the dup-within
         int index = 0;
-        while((pRightFile = FindInDupWithinList(pLeftFile->szFilename, &pRightDir->stDupFilesInTree, &index)) != NULL)
+        while ((pRightFile = FindInDupWithinList(pLeftFile->szFilename, &pRightDir->stDupFilesInTree, &index)) != NULL)
         {
             // Same file found in right dir, compare and mark as duplicate
-            if(CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
+            if (CompareFileInfoAndMark(pLeftFile, pRightFile, FALSE))
             {
                 logdbg(L"DupWithin Duplicate file: %s", pLeftFile->szFilename);
             }
@@ -353,10 +353,10 @@ error_return:
 void ClearFilesDupFlag_NoHash(_In_ PDIRINFO pDirInfo)
 {
     SB_ASSERT(pDirInfo);
-    if(pDirInfo->nFiles > 0)
+    if (pDirInfo->nFiles > 0)
     {
         CHL_HT_ITERATOR itr;
-        if(FAILED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
+        if (FAILED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
         {
             logerr(L"Cannot iterate through file list for dir: %s", pDirInfo->pszPath);
         }
@@ -364,7 +364,7 @@ void ClearFilesDupFlag_NoHash(_In_ PDIRINFO pDirInfo)
         {
             PFILEINFO pFileInfo;
             int nValSize;
-            while(SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, &nValSize, TRUE)))
+            while (SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, &nValSize, TRUE)))
             {
                 ClearDuplicateAttr(pFileInfo);
             }
@@ -385,17 +385,17 @@ static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
         goto done;
     }
 
-    if(!DeleteFile(szFilepath))
+    if (!DeleteFile(szFilepath))
     {
         logerr(L"DeleteFile failed, err: %u", GetLastError());
         fRetVal = FALSE;
     }
 
     // Remove from file list
-    if(FAILED(CHL_DsRemoveHT(pDirInfo->phtFiles, pFileInfo->szFilename, StringSizeBytes(pFileInfo->szFilename))))
+    if (FAILED(CHL_DsRemoveHT(pDirInfo->phtFiles, pFileInfo->szFilename, StringSizeBytes(pFileInfo->szFilename))))
     {
         // See if file is present in the dup within list
-        if(!(RemoveFromDupWithinList(pFileInfo, &pDirInfo->stDupFilesInTree)))
+        if (!(RemoveFromDupWithinList(pFileInfo, &pDirInfo->stDupFilesInTree)))
         {
             logerr(L"Failed to remove file from hashtable/list: %s", pFileInfo->szFilename);
             fRetVal = FALSE;
@@ -437,14 +437,14 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
     SB_ASSERT(pDirDeleteFrom);
 
     loginfo(L"In folder = %s", pDirDeleteFrom->pszPath);
-    if(pDirDeleteFrom->nFiles <= 0)
+    if (pDirDeleteFrom->nFiles <= 0)
     {
         logwarn(L"Empty folder");
         goto error_return;
     }
 
     CHL_HT_ITERATOR itr;
-    if(FAILED(CHL_DsInitIteratorHT(pDirDeleteFrom->phtFiles, &itr)))
+    if (FAILED(CHL_DsInitIteratorHT(pDirDeleteFrom->phtFiles, &itr)))
     {
         goto error_return;
     }
@@ -469,19 +469,19 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
         // The hashtable iterator expects the currently found entry
         // not to be removed until we move to the next entry. Hence,
         // this logic with previous pointer.
-        if(pPrevDupFileInfo)
+        if (pPrevDupFileInfo)
         {
             _DeleteFileUpdateDir(pPrevDupFileInfo, pDirDeleteFrom, pDirToUpdate);
             pPrevDupFileInfo = NULL;
         }
 
-        if(IsDuplicateFile(pFileInfo))
+        if (IsDuplicateFile(pFileInfo))
         {
             pPrevDupFileInfo = pFileInfo;
         }
     }
 
-    if(pPrevDupFileInfo)
+    if (pPrevDupFileInfo)
     {
         _DeleteFileUpdateDir(pPrevDupFileInfo, pDirDeleteFrom, pDirToUpdate);
         pPrevDupFileInfo = NULL;
@@ -500,9 +500,9 @@ error_return:
 // be deleted are specified in a list of strings that are the file names.
 // ** Assuming that paszFileNamesToDelete is an array of MAX_PATH strings.
 BOOL DeleteFilesInDir_NoHash(
-    _In_ PDIRINFO pDirDeleteFrom, 
-    _In_ PCWSTR paszFileNamesToDelete, 
-    _In_ int nFileNames, 
+    _In_ PDIRINFO pDirDeleteFrom,
+    _In_ PCWSTR paszFileNamesToDelete,
+    _In_ int nFileNames,
     _In_opt_ PDIRINFO pDirToUpdate)
 {
     SB_ASSERT(pDirDeleteFrom);
@@ -552,10 +552,10 @@ void PrintDirTree_NoHash(_In_ PDIRINFO pRootDir)
     PrintFilesInDir(pRootDir);
     wprintf(L"\n");
     // Print any dup within files
-    if(pRootDir->stDupFilesInTree.nCurFiles > 0)
+    if (pRootDir->stDupFilesInTree.nCurFiles > 0)
     {
         wprintf(L"These are the files that are duplicate within the specified root folder's tree itself:\n");
-        for(int i = 0; i < pRootDir->stDupFilesInTree.nCurFiles; ++i)
+        for (int i = 0; i < pRootDir->stDupFilesInTree.nCurFiles; ++i)
         {
             PFILEINFO pFileInfo;
             if (FAILED(CHL_DsReadRA(&pRootDir->stDupFilesInTree.aFiles, i, &pFileInfo, NULL, TRUE)))
@@ -579,7 +579,7 @@ void PrintFilesInDir_NoHash(_In_ PDIRINFO pDirInfo)
     SB_ASSERT(pDirInfo);
 
     CHL_HT_ITERATOR itr;
-    if(FAILED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
+    if (FAILED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
     {
         logerr(L"CHL_DsInitIteratorHT() failed.");
         return;
@@ -588,9 +588,9 @@ void PrintFilesInDir_NoHash(_In_ PDIRINFO pDirInfo)
     wprintf(L"%s\n", pDirInfo->pszPath);
 
     PFILEINFO pFileInfo = NULL;
-    while(SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, NULL, TRUE)))
+    while (SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, NULL, TRUE)))
     {
-        wprintf(L"%10u %c %1d %s\n", 
+        wprintf(L"%10u %c %1d %s\n",
             pFileInfo->llFilesize.LowPart,
             pFileInfo->fIsDirectory ? L'D' : L'F',
             IsDuplicateFile(pFileInfo) ? 1 : 0,
