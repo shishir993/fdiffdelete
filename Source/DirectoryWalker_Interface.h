@@ -18,7 +18,7 @@
 typedef struct _dupWithin
 {
     int nCurFiles;
-	CHL_RARRAY aFiles;
+    CHL_RARRAY aFiles;
 } DUPFILES_WITHIN, *PDUPFILES_WITHIN;
 
 typedef struct _DirectoryInfo
@@ -30,8 +30,8 @@ typedef struct _DirectoryInfo
     // Was hash comapre used when this DIRINFO was built?
     BOOL fHashCompare;
 
-	// When deleting files, should empty folders be deleted?
-	BOOL fDeleteEmptyDirs;
+    // When deleting files, should empty folders be deleted?
+    BOOL fDeleteEmptyDirs;
 
     // Use a hashtable to store file list.
     // Key is the filename, value is a FILEINFO structure - if hash compare is turned OFF
@@ -51,8 +51,8 @@ BOOL BuildDirTree(_In_z_ PCWSTR pszRootpath, _In_ BOOL fCompareHashes, _Out_ PDI
 
 // Build the list of files in the given folder
 BOOL BuildFilesInDir(
-    _In_ PCWSTR pszFolderpath, 
-    _In_opt_ PCHL_QUEUE pqDirsToTraverse, 
+    _In_ PCWSTR pszFolderpath,
+    _In_opt_ PCHL_QUEUE pqDirsToTraverse,
     _In_ BOOL fCompareHashes,
     _Inout_ PDIRINFO* ppDirInfo);
 
@@ -72,15 +72,15 @@ BOOL DeleteDupFilesInDir(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirToUpdat
 // from the pDirDeleteFrom directory and update the other directory files'. The files to
 // be deleted are specified in a list of strings that are the file names.
 BOOL DeleteFilesInDir(
-    _In_ PDIRINFO pDirDeleteFrom, 
-    _In_ PCWSTR paszFileNamesToDelete, 
-    _In_ int nFileNames, 
+    _In_ PDIRINFO pDirDeleteFrom,
+    _In_ PCWSTR paszFileNamesToDelete,
+    _In_ int nFileNames,
     _In_ PDIRINFO pDirToUpdate);
 
 BOOL DeleteFilesInDir(
-    _In_ PDIRINFO pDirDeleteFrom, 
-    _In_ PFILEINFO *paFilesToDelete, 
-    _In_ int nFiles, 
+    _In_ PDIRINFO pDirDeleteFrom,
+    _In_ PFILEINFO *paFilesToDelete,
+    _In_ int nFiles,
     _In_ PDIRINFO pDirToUpdate);
 
 // Print the dir tree in BFS order, two blank lines separating 
