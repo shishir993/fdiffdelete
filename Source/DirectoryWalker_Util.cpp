@@ -79,3 +79,108 @@ BOOL IsDirectoryEmpty(_In_z_ PCWSTR pszPath)
     FindClose(hFindFile);
     return fEmpty;
 }
+
+HRESULT DelEmptyFolders_Init(_In_ PDIRINFO pDirDeleteFrom, _Out_ PCHL_HTABLE* pphtFoldersSeen)
+{
+    HRESULT hr = S_OK;
+    *pphtFoldersSeen = NULL;
+    if (pDirDeleteFrom->fDeleteEmptyDirs == TRUE)
+    {
+        int nEstEntries = min(1, pDirDeleteFrom->nDirs);
+        hr = CHL_DsCreateHT(pphtFoldersSeen, nEstEntries, CHL_KT_WSTRING, CHL_VT_INT32, FALSE);
+    }
+    return hr;
+}
+
+void DelEmptyFolders_Add(_In_opt_ PCHL_HTABLE phtFoldersSeen, _In_ PFILEINFO pFile)
+{
+    if (phtFoldersSeen == NULL)
+    {
+        return;
+    }
+
+    WCHAR szDir[MAX_PATH];
+    HRESULT hr;
+    if (pFile->fIsDirectory == TRUE)
+    {
+        hr = PathCchCombine(szDir, ARRAYSIZE(szDir), pFile->szPath, pFile->szFilename);
+    }
+    else
+    {
+        hr = StringCchCopy(szDir, ARRAYSIZE(szDir), pFile->szPath);
+    }
+
+    if (SUCCEEDED(hr))
+    {
+        hr = phtFoldersSeen->Insert(phtFoldersSeen, (PCVOID)szDir, 0, 0, 0);
+    }
+
+    if (FAILED(hr))
+    {
+        logwarn(L"Failed to record as a seen dir, hr: %x, %s\\%s", hr, pFile->szPath, pFile->szFilename);
+    }
+}
+
+void DelEmptyFolders_Delete(_In_opt_ PCHL_HTABLE phtFoldersSeen)
+{
+    if (phtFoldersSeen == NULL)
+    {
+        return;
+    }
+
+    /*
+     This is just a hashtable of folders and not a tree. So we cannot use DFS logic of checking for
+     empty folders. So we need to iterate through the hashtable in search of empty folders until
+     an iteration where we do not find any empty folders.
+    */
+
+    int nFoldersRemoved;
+    do
+    {
+        nFoldersRemoved = 0;
+
+        CHL_HT_ITERATOR itr;
+        HRESULT hr = phtFoldersSeen->InitIterator(phtFoldersSeen, &itr);
+        if (FAILED(hr))
+        {
+            logwarn(L"Error deleting empty dirs, hr: %x", hr);
+            goto fend;
+        }
+
+        PCWSTR pszDir = NULL;
+        PCWSTR pszPrevDir = NULL;
+        if (FAILED(phtFoldersSeen->GetNext(&itr, &pszDir, NULL, NULL, NULL, TRUE)))
+        {
+            break;
+        }
+
+        do
+        {
+            // The hashtable iterator expects the currently found entry
+            // not to be removed until we move to the next entry. Hence,
+            // this logic with previous pointer.
+            if (pszPrevDir != NULL)
+            {
+                phtFoldersSeen->Remove(phtFoldersSeen, (PCVOID)pszPrevDir, 0);
+                pszPrevDir = NULL;
+            }
+
+            if (IsDirectoryEmpty(pszDir) == TRUE)
+            {
+                pszPrevDir = pszDir;
+                hr = RemoveDirectory(pszDir) ? S_OK : HRESULT_FROM_WIN32(GetLastError());
+                loginfo(L"Attempt to remove empty dir, hr: %x, %s", hr, pszDir);
+                ++nFoldersRemoved;
+            }
+
+        } while ((SUCCEEDED(phtFoldersSeen->GetNext(&itr, &pszDir, NULL, NULL, NULL, TRUE))));
+
+        if (pszPrevDir != NULL)
+        {
+            phtFoldersSeen->Remove(phtFoldersSeen, (PCVOID)pszPrevDir, 0);
+        }
+    } while (0 < nFoldersRemoved);
+
+fend:
+    phtFoldersSeen->Destroy(phtFoldersSeen);
+}
