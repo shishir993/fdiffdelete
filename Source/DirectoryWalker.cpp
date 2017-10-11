@@ -48,12 +48,12 @@ static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIR
     }
 
     // Allocate an array of pointer for the dup within files
-	hr = CHL_DsCreateRA(&pDirInfo->stDupFilesInTree.aFiles, CHL_VT_USEROBJECT, INIT_DUP_WITHIN_SIZE, (MAXINT / 2));
-	if (FAILED(hr))
-	{
-		logerr(L"Couldn't create resizable array for dup files, hr: %x", hr);
-		goto error_return;
-	}
+    hr = CHL_DsCreateRA(&pDirInfo->stDupFilesInTree.aFiles, CHL_VT_USEROBJECT, INIT_DUP_WITHIN_SIZE, (MAXINT / 2));
+    if (FAILED(hr))
+    {
+        logerr(L"Couldn't create resizable array for dup files, hr: %x", hr);
+        goto error_return;
+    }
 
     *ppDirInfo = pDirInfo;
     return hr;
@@ -76,7 +76,7 @@ void DestroyDirInfo_NoHash(_In_ PDIRINFO pDirInfo)
         CHL_DsDestroyHT(pDirInfo->phtFiles);
     }
 
-	CHL_DsDestroyRA(&pDirInfo->stDupFilesInTree.aFiles);
+    CHL_DsDestroyRA(&pDirInfo->stDupFilesInTree.aFiles);
 
     free(pDirInfo);
 }
@@ -135,7 +135,7 @@ BOOL BuildFilesInDir_NoHash(
     SB_ASSERT(pszFolderpath);
     SB_ASSERT(ppDirInfo);
 
-	HANDLE hFindFile = NULL;
+    HANDLE hFindFile = NULL;
 
     loginfo(L"Building dir: %s", pszFolderpath);
     if(*ppDirInfo == NULL && FAILED(_Init(pszFolderpath, (pqDirsToTraverse != NULL), ppDirInfo)))
@@ -155,7 +155,7 @@ BOOL BuildFilesInDir_NoHash(
     int nLen = wcsnlen(pszFolderpath, MAX_PATH);
     if(nLen > 2 && wcsncmp(pszFolderpath + nLen - 2, L"\\*", MAX_PATH) != 0)
     {
-		PathCchCombine(szSearchpath, ARRAYSIZE(szSearchpath), pszFolderpath, L"*");
+        PathCchCombine(szSearchpath, ARRAYSIZE(szSearchpath), pszFolderpath, L"*");
     }
 
     // Initialize search for files in folder
@@ -218,19 +218,19 @@ BOOL BuildFilesInDir_NoHash(
         }
         else
         {
-			// Either this is a file or a directory but the folder must be considered as a file
-			// because recursion is not enabled and we want to enable comparison of some attributes of a folder.
+            // Either this is a file or a directory but the folder must be considered as a file
+            // because recursion is not enabled and we want to enable comparison of some attributes of a folder.
             // If the current file's name is already inserted, then add it to the dup within list
             BOOL fFileAdded;
-            if(SUCCEEDED(CHL_DsFindHT(pCurDirInfo->phtFiles, findData.cFileName,
-				StringSizeBytes(findData.cFileName), NULL, NULL, TRUE)))
+            if (SUCCEEDED(CHL_DsFindHT(pCurDirInfo->phtFiles, findData.cFileName,
+                StringSizeBytes(findData.cFileName), NULL, NULL, TRUE)))
             {
                 fFileAdded = AddToDupWithinList(&pCurDirInfo->stDupFilesInTree, pFileInfo);
             }
             else
             {
                 fFileAdded = SUCCEEDED(CHL_DsInsertHT(pCurDirInfo->phtFiles, findData.cFileName,
-					StringSizeBytes(findData.cFileName), pFileInfo, sizeof pFileInfo));
+                    StringSizeBytes(findData.cFileName), pFileInfo, sizeof pFileInfo));
             }
 
             if(!fFileAdded)
@@ -318,10 +318,10 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
     for(int i = 0; i < pLeftDir->stDupFilesInTree.nCurFiles; ++i)
     {
         // Check if this file is in the right dir by checking both its hashtable and the dupwithin list
-		if (FAILED(CHL_DsReadRA(&pLeftDir->stDupFilesInTree.aFiles, i, &pLeftFile, NULL, TRUE)))
-		{
-			continue;
-		}
+        if (FAILED(CHL_DsReadRA(&pLeftDir->stDupFilesInTree.aFiles, i, &pLeftFile, NULL, TRUE)))
+        {
+            continue;
+        }
 
         // Hashtable first
         if(SUCCEEDED(CHL_DsFindHT(pRightDir->phtFiles, pLeftFile->szFilename, StringSizeBytes(pLeftFile->szFilename), &pRightFile, NULL, TRUE)))
@@ -412,17 +412,17 @@ done:
     return fRetVal;
 }
 
-static BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDeleteFrom, _In_opt_ PDIRINFO pUpdateDir)
+BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDeleteFrom, _In_opt_ PDIRINFO pUpdateDir)
 {
-	SB_ASSERT(pFileToDelete->fIsDirectory == FALSE);
-    if(pUpdateDir)
+    SB_ASSERT(pFileToDelete->fIsDirectory == FALSE);
+    if (pUpdateDir)
     {
-		// Find this file in the other directory and update that file info
-		// to say that it is not a duplicate any more.
+        // Find this file in the other directory and update that file info
+        // to say that it is not a duplicate any more.
         PFILEINFO pFileToUpdate;
         BOOL fFound = SUCCEEDED(CHL_DsFindHT(pUpdateDir->phtFiles, pFileToDelete->szFilename,
-			StringSizeBytes(pFileToDelete->szFilename), &pFileToUpdate, NULL, TRUE));
-    
+            StringSizeBytes(pFileToDelete->szFilename), &pFileToUpdate, NULL, TRUE));
+
         // Must find in the other dir also.
         SB_ASSERT(fFound);
         ClearDuplicateAttr(pFileToUpdate);
@@ -452,29 +452,29 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
         goto error_return;
     }
 
-	PCHL_HTABLE phtFoldersSeen = NULL;
-	if (pDirDeleteFrom->fDeleteEmptyDirs)
-	{
-		int nEstEntries = min(1, pDirDeleteFrom->nDirs);
-		if (FAILED(CHL_DsCreateHT(&phtFoldersSeen, nEstEntries, CHL_KT_WSTRING, CHL_VT_INT32, FALSE)))
-		{
-			goto error_return;
-		}
-	}
+    PCHL_HTABLE phtFoldersSeen = NULL;
+    if (pDirDeleteFrom->fDeleteEmptyDirs)
+    {
+        int nEstEntries = min(1, pDirDeleteFrom->nDirs);
+        if (FAILED(CHL_DsCreateHT(&phtFoldersSeen, nEstEntries, CHL_KT_WSTRING, CHL_VT_INT32, FALSE)))
+        {
+            goto error_return;
+        }
+    }
 
     PFILEINFO pFileInfo = NULL;
     PFILEINFO pPrevDupFileInfo = NULL;
-    while(SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, NULL, TRUE)))
+    while (SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, NULL, TRUE)))
     {
-		if (phtFoldersSeen != NULL)
-		{
-			_AddToFoldersSeen(phtFoldersSeen, pFileInfo);
-		}
+        if (phtFoldersSeen != NULL)
+        {
+            _AddToFoldersSeen(phtFoldersSeen, pFileInfo);
+        }
 
-		if (pFileInfo->fIsDirectory == TRUE)
-		{
-			continue;
-		}
+        if (pFileInfo->fIsDirectory == TRUE)
+        {
+            continue;
+        }
 
         // The hashtable iterator expects the currently found entry
         // not to be removed until we move to the next entry. Hence,
@@ -497,17 +497,17 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
         pPrevDupFileInfo = NULL;
     }
 
-	if (phtFoldersSeen != NULL)
-	{
-		_DeleteEmptyFolders(phtFoldersSeen);
-	}
+    if (phtFoldersSeen != NULL)
+    {
+        _DeleteEmptyFolders(phtFoldersSeen);
+    }
     return TRUE;
 
 error_return:
-	if (phtFoldersSeen != NULL)
-	{
-		phtFoldersSeen->Destroy(phtFoldersSeen);
-	}
+    if (phtFoldersSeen != NULL)
+    {
+        phtFoldersSeen->Destroy(phtFoldersSeen);
+    }
     return FALSE;
 }
 
@@ -528,31 +528,31 @@ BOOL DeleteFilesInDir_NoHash(
     int index = 0;
     loginfo(L"Deleting %d files from %s", nFileNames, pDirDeleteFrom->pszPath);
 
-	PCHL_HTABLE phtFoldersSeen = NULL;
-	if (pDirDeleteFrom->fDeleteEmptyDirs)
-	{
-		int nEstEntries = min(1, pDirDeleteFrom->nDirs);
-		if (FAILED(CHL_DsCreateHT(&phtFoldersSeen, nEstEntries, CHL_KT_WSTRING, CHL_VT_INT32, FALSE)))
-		{
-			return FALSE;
-		}
-	}
-
-    while(index < nFileNames)
+    PCHL_HTABLE phtFoldersSeen = NULL;
+    if (pDirDeleteFrom->fDeleteEmptyDirs)
     {
-		PFILEINFO pFileToDelete;
-        if(SUCCEEDED(CHL_DsFindHT(pDirDeleteFrom->phtFiles, (PCVOID)paszFileNamesToDelete,
-			StringSizeBytes(paszFileNamesToDelete), &pFileToDelete, NULL, TRUE)))
+        int nEstEntries = min(1, pDirDeleteFrom->nDirs);
+        if (FAILED(CHL_DsCreateHT(&phtFoldersSeen, nEstEntries, CHL_KT_WSTRING, CHL_VT_INT32, FALSE)))
         {
-			if (phtFoldersSeen != NULL)
-			{
-				_AddToFoldersSeen(phtFoldersSeen, pFileToDelete);
-			}
+            return FALSE;
+        }
+    }
 
-			if (pFileToDelete->fIsDirectory == FALSE)
-			{
-				_DeleteFileUpdateDir(pFileToDelete, pDirDeleteFrom, pDirToUpdate);
-			}
+    while (index < nFileNames)
+    {
+        PFILEINFO pFileToDelete;
+        if (SUCCEEDED(CHL_DsFindHT(pDirDeleteFrom->phtFiles, (PCVOID)paszFileNamesToDelete,
+            StringSizeBytes(paszFileNamesToDelete), &pFileToDelete, NULL, TRUE)))
+        {
+            if (phtFoldersSeen != NULL)
+            {
+                _AddToFoldersSeen(phtFoldersSeen, pFileToDelete);
+            }
+
+            if (pFileToDelete->fIsDirectory == FALSE)
+            {
+                _DeleteFileUpdateDir(pFileToDelete, pDirDeleteFrom, pDirToUpdate);
+            }
         }
         else
         {
@@ -562,10 +562,10 @@ BOOL DeleteFilesInDir_NoHash(
         ++index;
     }
 
-	if (phtFoldersSeen != NULL)
-	{
-		_DeleteEmptyFolders(phtFoldersSeen);
-	}
+    if (phtFoldersSeen != NULL)
+    {
+        _DeleteEmptyFolders(phtFoldersSeen);
+    }
     return TRUE;
 }
 
@@ -583,11 +583,11 @@ void PrintDirTree_NoHash(_In_ PDIRINFO pRootDir)
         wprintf(L"These are the files that are duplicate within the specified root folder's tree itself:\n");
         for(int i = 0; i < pRootDir->stDupFilesInTree.nCurFiles; ++i)
         {
-			PFILEINFO pFileInfo;
-			if (FAILED(CHL_DsReadRA(&pRootDir->stDupFilesInTree.aFiles, i, &pFileInfo, NULL, TRUE)))
-			{
-				continue;
-			}
+            PFILEINFO pFileInfo;
+            if (FAILED(CHL_DsReadRA(&pRootDir->stDupFilesInTree.aFiles, i, &pFileInfo, NULL, TRUE)))
+            {
+                continue;
+            }
 
             wprintf(L"%10u %c %1d %s\n",
                 pFileInfo->llFilesize.LowPart,
@@ -628,12 +628,12 @@ void PrintFilesInDir_NoHash(_In_ PDIRINFO pDirInfo)
 
 BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO pFileInfo)
 {
-	HRESULT hr = pDupWithin->aFiles.Write(&pDupWithin->aFiles, pDupWithin->nCurFiles, pFileInfo, sizeof(*pFileInfo));
-    if(SUCCEEDED(hr))
+    HRESULT hr = pDupWithin->aFiles.Write(&pDupWithin->aFiles, pDupWithin->nCurFiles, pFileInfo, sizeof(*pFileInfo));
+    if (SUCCEEDED(hr))
     {
-		++(pDupWithin->nCurFiles);
+        ++(pDupWithin->nCurFiles);
     }
-	return SUCCEEDED(hr);
+    return SUCCEEDED(hr);
 }
 
 PFILEINFO FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _Inout_ int* piStartIndex)
@@ -642,17 +642,17 @@ PFILEINFO FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDu
 
     while (*piStartIndex < pDupWithinToSearch->nCurFiles)
     {
-		++(*piStartIndex);
+        ++(*piStartIndex);
 
-		PFILEINFO pFile;
-		if (FAILED(CHL_DsReadRA(&pDupWithinToSearch->aFiles, (*piStartIndex) - 1, &pFile, NULL, TRUE)))
-		{
-			continue;
-		}
+        PFILEINFO pFile;
+        if (FAILED(CHL_DsReadRA(&pDupWithinToSearch->aFiles, (*piStartIndex) - 1, &pFile, NULL, TRUE)))
+        {
+            continue;
+        }
 
         if (_wcsnicmp(pszFilename, pFile->szFilename, MAX_PATH) == 0)
         {
-			return pFile;
+            return pFile;
         }
     }
     return NULL;
@@ -668,13 +668,13 @@ BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES_WITHIN
     }
 
     WCHAR szCompareToPath[MAX_PATH];
-    for(int i = 0; i < pDupWithinToSearch->nCurFiles; ++i)
+    for (int i = 0; i < pDupWithinToSearch->nCurFiles; ++i)
     {
-		PFILEINFO pFile;
-		if (FAILED(CHL_DsReadRA(&pDupWithinToSearch->aFiles, i, &pFile, NULL, TRUE)))
-		{
-			continue;
-		}
+        PFILEINFO pFile;
+        if (FAILED(CHL_DsReadRA(&pDupWithinToSearch->aFiles, i, &pFile, NULL, TRUE)))
+        {
+            continue;
+        }
 
         if (FAILED(PathCchCombine(szCompareToPath, ARRAYSIZE(szCompareToPath), pFile->szPath, pFile->szFilename) == NULL))
         {
@@ -682,9 +682,9 @@ BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES_WITHIN
             return FALSE;
         }
 
-        if(_wcsnicmp(szCompareFromPath, szCompareToPath, MAX_PATH) == 0)
+        if (_wcsnicmp(szCompareFromPath, szCompareToPath, MAX_PATH) == 0)
         {
-			CHL_DsClearAtRA(&pDupWithinToSearch->aFiles, i);
+            CHL_DsClearAtRA(&pDupWithinToSearch->aFiles, i);
             return TRUE;
         }
     }
@@ -693,77 +693,77 @@ BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES_WITHIN
 
 void _AddToFoldersSeen(_Inout_ PCHL_HTABLE phtFoldersSeen, _In_ PFILEINFO pFile)
 {
-	WCHAR szDir[MAX_PATH];
-	HRESULT hr;
-	if (pFile->fIsDirectory == TRUE)
-	{
-		hr = PathCchCombine(szDir, ARRAYSIZE(szDir), pFile->szPath, pFile->szFilename);
-	}
-	else
-	{
-		hr = StringCchCopy(szDir, ARRAYSIZE(szDir), pFile->szPath);
-	}
+    WCHAR szDir[MAX_PATH];
+    HRESULT hr;
+    if (pFile->fIsDirectory == TRUE)
+    {
+        hr = PathCchCombine(szDir, ARRAYSIZE(szDir), pFile->szPath, pFile->szFilename);
+    }
+    else
+    {
+        hr = StringCchCopy(szDir, ARRAYSIZE(szDir), pFile->szPath);
+    }
 
-	if (SUCCEEDED(hr))
-	{
-		hr = phtFoldersSeen->Insert(phtFoldersSeen, (PCVOID)szDir, 0, 0, 0);
-	}
-	
-	if (FAILED(hr))
-	{
-		logwarn(L"Failed to record as a seen dir, hr: %x, %s\\%s", hr, pFile->szPath, pFile->szFilename);
-	}
+    if (SUCCEEDED(hr))
+    {
+        hr = phtFoldersSeen->Insert(phtFoldersSeen, (PCVOID)szDir, 0, 0, 0);
+    }
+
+    if (FAILED(hr))
+    {
+        logwarn(L"Failed to record as a seen dir, hr: %x, %s\\%s", hr, pFile->szPath, pFile->szFilename);
+    }
 }
 
 void _DeleteEmptyFolders(_Inout_ PCHL_HTABLE phtFoldersSeen)
 {
-	int nFoldersRemoved;
-	do
-	{
-		nFoldersRemoved = 0;
+    int nFoldersRemoved;
+    do
+    {
+        nFoldersRemoved = 0;
 
-		CHL_HT_ITERATOR itr;
-		HRESULT hr = phtFoldersSeen->InitIterator(phtFoldersSeen, &itr);
-		if (FAILED(hr))
-		{
-			logwarn(L"Error deleting empty dirs, hr: %x", hr);
-			goto fend;
-		}
+        CHL_HT_ITERATOR itr;
+        HRESULT hr = phtFoldersSeen->InitIterator(phtFoldersSeen, &itr);
+        if (FAILED(hr))
+        {
+            logwarn(L"Error deleting empty dirs, hr: %x", hr);
+            goto fend;
+        }
 
-		PCWSTR pszDir = NULL;
-		PCWSTR pszPrevDir = NULL;
-		if (FAILED(phtFoldersSeen->GetNext(&itr, &pszDir, NULL, NULL, NULL, TRUE)))
-		{
-			break;
-		}
-				
-		do
-		{
-			// The hashtable iterator expects the currently found entry
-			// not to be removed until we move to the next entry. Hence,
-			// this logic with previous pointer.
-			if (pszPrevDir != NULL)
-			{
-				phtFoldersSeen->Remove(phtFoldersSeen, (PCVOID)pszPrevDir, 0);
-				pszPrevDir = NULL;
-			}
+        PCWSTR pszDir = NULL;
+        PCWSTR pszPrevDir = NULL;
+        if (FAILED(phtFoldersSeen->GetNext(&itr, &pszDir, NULL, NULL, NULL, TRUE)))
+        {
+            break;
+        }
 
-			if (IsDirectoryEmpty(pszDir) == TRUE)
-			{
-				pszPrevDir = pszDir;
-				hr = RemoveDirectory(pszDir) ? S_OK : HRESULT_FROM_WIN32(GetLastError());
-				loginfo(L"Attempt to remove empty dir, hr: %x, %s", hr, pszDir);
-				++nFoldersRemoved;
-			}
+        do
+        {
+            // The hashtable iterator expects the currently found entry
+            // not to be removed until we move to the next entry. Hence,
+            // this logic with previous pointer.
+            if (pszPrevDir != NULL)
+            {
+                phtFoldersSeen->Remove(phtFoldersSeen, (PCVOID)pszPrevDir, 0);
+                pszPrevDir = NULL;
+            }
 
-		} while ((SUCCEEDED(phtFoldersSeen->GetNext(&itr, &pszDir, NULL, NULL, NULL, TRUE))));
+            if (IsDirectoryEmpty(pszDir) == TRUE)
+            {
+                pszPrevDir = pszDir;
+                hr = RemoveDirectory(pszDir) ? S_OK : HRESULT_FROM_WIN32(GetLastError());
+                loginfo(L"Attempt to remove empty dir, hr: %x, %s", hr, pszDir);
+                ++nFoldersRemoved;
+            }
 
-		if (pszPrevDir != NULL)
-		{
-			phtFoldersSeen->Remove(phtFoldersSeen, (PCVOID)pszPrevDir, 0);
-		}
-	} while (0 < nFoldersRemoved);
+        } while ((SUCCEEDED(phtFoldersSeen->GetNext(&itr, &pszDir, NULL, NULL, NULL, TRUE))));
+
+        if (pszPrevDir != NULL)
+        {
+            phtFoldersSeen->Remove(phtFoldersSeen, (PCVOID)pszPrevDir, 0);
+        }
+    } while (0 < nFoldersRemoved);
 
 fend:
-	phtFoldersSeen->Destroy(phtFoldersSeen);
+    phtFoldersSeen->Destroy(phtFoldersSeen);
 }

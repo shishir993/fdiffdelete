@@ -14,7 +14,7 @@ static HCRYPTPROV g_hCrypt = NULL;
 HRESULT FileInfoInit(_In_ BOOL fComputeHash)
 {
     HRESULT hr = S_OK;
-    if(fComputeHash && g_hCrypt == NULL)
+    if (fComputeHash && g_hCrypt == NULL)
     {
         hr = HashFactoryInit(&g_hCrypt);
     }
@@ -23,7 +23,7 @@ HRESULT FileInfoInit(_In_ BOOL fComputeHash)
 
 void FileInfoDestroy()
 {
-    if(g_hCrypt)
+    if (g_hCrypt)
     {
         HashFactoryDestroy(g_hCrypt);
         g_hCrypt = NULL;
@@ -43,10 +43,10 @@ BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ BOOL fComputeHash, _In_ 
     int nCharsInRoot = 0;
     for (const WCHAR* pch = pszFullpathToFile; pch != pszFilename; ++pch, ++nCharsInRoot)
         ;
-    
+
     // Copy folder path first (we've calculate the length to copy)
     wcsncpy_s(pFileInfo->szPath, ARRAYSIZE(pFileInfo->szPath), pszFullpathToFile, nCharsInRoot);
-    
+
     // Now copy the filename
     wcscpy_s(pFileInfo->szFilename, ARRAYSIZE(pFileInfo->szFilename), pszFilename);
 
@@ -54,34 +54,34 @@ BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ BOOL fComputeHash, _In_ 
     // TODO: To extend this limit to 32,767 wide characters, 
     // call the Unicode version of the function and prepend "\\?\" to the path
     WIN32_FILE_ATTRIBUTE_DATA fileAttr;
-    if(!GetFileAttributesEx(pszFullpathToFile, GetFileExInfoStandard, &fileAttr))
+    if (!GetFileAttributesEx(pszFullpathToFile, GetFileExInfoStandard, &fileAttr))
     {
         logerr(L"Unable to get attributes of file: %s", pszFullpathToFile);
         goto error_return;
     }
 
-	// Store FILETIME in fileinfo for easy comparison in sorting the listview rows
-	CopyMemory(&pFileInfo->ftModifiedTime, &fileAttr.ftLastWriteTime, sizeof(pFileInfo->ftModifiedTime));
+    // Store FILETIME in fileinfo for easy comparison in sorting the listview rows
+    CopyMemory(&pFileInfo->ftModifiedTime, &fileAttr.ftLastWriteTime, sizeof(pFileInfo->ftModifiedTime));
 
-	// Convert filetime to localtime and store in fileinfo
-	SYSTEMTIME stUTC;
-	FileTimeToSystemTime(&pFileInfo->ftModifiedTime, &stUTC);
-	SystemTimeToTzSpecificLocalTime(NULL, &stUTC, &pFileInfo->stModifiedTime);
+    // Convert filetime to localtime and store in fileinfo
+    SYSTEMTIME stUTC;
+    FileTimeToSystemTime(&pFileInfo->ftModifiedTime, &stUTC);
+    SystemTimeToTzSpecificLocalTime(NULL, &stUTC, &pFileInfo->stModifiedTime);
 
-    if(fileAttr.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+    if (fileAttr.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
     {
         pFileInfo->fIsDirectory = TRUE;
     }
     else
     {
-		pFileInfo->llFilesize.HighPart = fileAttr.nFileSizeHigh;
-		pFileInfo->llFilesize.LowPart = fileAttr.nFileSizeLow;
+        pFileInfo->llFilesize.HighPart = fileAttr.nFileSizeHigh;
+        pFileInfo->llFilesize.LowPart = fileAttr.nFileSizeLow;
 
-        if(fComputeHash)
+        if (fComputeHash)
         {
             // Generate hash. Open file handle first...    
             HANDLE hFile = CreateFileW(pszFullpathToFile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-            if(hFile == INVALID_HANDLE_VALUE)
+            if (hFile == INVALID_HANDLE_VALUE)
             {
                 logerr(L"Failed to open file %s", pszFullpathToFile);
                 goto error_return;
@@ -89,7 +89,7 @@ BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ BOOL fComputeHash, _In_ 
 
             HRESULT hr = CalculateSHA1(g_hCrypt, hFile, pFileInfo->abHash);
             CloseHandle(hFile);
-            if(FAILED(hr))
+            if (FAILED(hr))
             {
                 logerr(L"Failed to compute hash (0x%08x) for file: %s", hr, pszFullpathToFile);
                 goto error_return;
@@ -112,21 +112,21 @@ BOOL CreateFileInfo(_In_ PCWSTR pszFullpathToFile, _In_ BOOL fComputeHash, _Out_
 
     PFILEINFO pFileInfo;
     pFileInfo = (PFILEINFO)malloc(sizeof(FILEINFO));
-    if(pFileInfo == NULL)
+    if (pFileInfo == NULL)
     {
         goto error_return;
     }
 
-    if(!CreateFileInfo(pszFullpathToFile, fComputeHash, pFileInfo))
+    if (!CreateFileInfo(pszFullpathToFile, fComputeHash, pFileInfo))
     {
         goto error_return;
     }
-    
+
     *ppFileInfo = pFileInfo;
     return TRUE;
 
 error_return:
-    if(pFileInfo != NULL)
+    if (pFileInfo != NULL)
     {
         free(pFileInfo);
     }
@@ -149,9 +149,9 @@ BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO
     // the unchanged folder's files' duplicacy.
 
     // Two directories match only if their names are the same
-    if(pLeftFile->fIsDirectory && pRightFile->fIsDirectory)
+    if (pLeftFile->fIsDirectory && pRightFile->fIsDirectory)
     {
-        if(_wcsnicmp(pLeftFile->szFilename, pRightFile->szFilename, MAX_PATH) == 0)
+        if (_wcsnicmp(pLeftFile->szFilename, pRightFile->szFilename, MAX_PATH) == 0)
         {
             pLeftFile->bDupInfo |= FDUP_NAME_MATCH;
             pRightFile->bDupInfo |= FDUP_NAME_MATCH;
@@ -162,7 +162,7 @@ BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO
             pRightFile->bDupInfo &= (~FDUP_NAME_MATCH);
         }
     }
-    else if(pLeftFile->fIsDirectory || pRightFile->fIsDirectory)
+    else if (pLeftFile->fIsDirectory || pRightFile->fIsDirectory)
     {
         // Only one of them is a directory, there can be no match except a
         // name match between a file and directory but it isn't very useful.
@@ -173,7 +173,7 @@ BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO
     {
         // Both are files, perform the various match checks
 
-        if(_wcsnicmp(pLeftFile->szFilename, pRightFile->szFilename, MAX_PATH) == 0)
+        if (_wcsnicmp(pLeftFile->szFilename, pRightFile->szFilename, MAX_PATH) == 0)
         {
             pLeftFile->bDupInfo |= FDUP_NAME_MATCH;
             pRightFile->bDupInfo |= FDUP_NAME_MATCH;
@@ -184,7 +184,7 @@ BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO
             pRightFile->bDupInfo &= (~FDUP_NAME_MATCH);
         }
 
-        if(pLeftFile->llFilesize.QuadPart == pRightFile->llFilesize.QuadPart)
+        if (pLeftFile->llFilesize.QuadPart == pRightFile->llFilesize.QuadPart)
         {
             pLeftFile->bDupInfo |= FDUP_SIZE_MATCH;
             pRightFile->bDupInfo |= FDUP_SIZE_MATCH;
@@ -195,7 +195,7 @@ BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO
             pRightFile->bDupInfo &= (~FDUP_SIZE_MATCH);
         }
 
-        if(memcmp(&pLeftFile->stModifiedTime, &pRightFile->stModifiedTime, sizeof(pLeftFile->stModifiedTime)) == 0)
+        if (memcmp(&pLeftFile->stModifiedTime, &pRightFile->stModifiedTime, sizeof(pLeftFile->stModifiedTime)) == 0)
         {
             pLeftFile->bDupInfo |= FDUP_DATE_MATCH;
             pRightFile->bDupInfo |= FDUP_DATE_MATCH;
@@ -206,9 +206,9 @@ BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO
             pRightFile->bDupInfo &= (~FDUP_DATE_MATCH);
         }
 
-        if(fCompareHashes)
+        if (fCompareHashes)
         {
-            if(memcmp(&pLeftFile->abHash, &pRightFile->abHash, sizeof(pLeftFile->abHash)) == 0)
+            if (memcmp(&pLeftFile->abHash, &pRightFile->abHash, sizeof(pLeftFile->abHash)) == 0)
             {
                 pLeftFile->bDupInfo |= FDUP_HASH_MATCH;
                 pRightFile->bDupInfo |= FDUP_HASH_MATCH;
@@ -226,16 +226,16 @@ BOOL CompareFileInfoAndMark(_In_ const PFILEINFO pLeftFile, _In_ const PFILEINFO
 
 inline BOOL IsDuplicateFile(_In_ const PFILEINFO pFileInfo)
 {
-	BYTE bDupInfo = pFileInfo->bDupInfo;
-	if (pFileInfo->fIsDirectory)
-	{
-		return (bDupInfo & FDUP_NAME_MATCH);
-	}
+    BYTE bDupInfo = pFileInfo->bDupInfo;
+    if (pFileInfo->fIsDirectory)
+    {
+        return (bDupInfo & FDUP_NAME_MATCH);
+    }
 
-	return (bDupInfo & FDUP_HASH_MATCH) ||
-		((bDupInfo & FDUP_NAME_MATCH) &&
-		(bDupInfo & FDUP_SIZE_MATCH) &&
-		(bDupInfo & FDUP_DATE_MATCH));
+    return (bDupInfo & FDUP_HASH_MATCH) ||
+        ((bDupInfo & FDUP_NAME_MATCH) &&
+        (bDupInfo & FDUP_SIZE_MATCH) &&
+            (bDupInfo & FDUP_DATE_MATCH));
 }
 
 void GetDupTypeString(_In_ PFILEINFO pFileInfo, _Inout_z_ PWSTR pszDupType)
@@ -245,27 +245,27 @@ void GetDupTypeString(_In_ PFILEINFO pFileInfo, _Inout_z_ PWSTR pszDupType)
     *pch = 0;
 
     BYTE bDupInfo = pFileInfo->bDupInfo;
-    if(bDupInfo != FDUP_NO_MATCH)
+    if (bDupInfo != FDUP_NO_MATCH)
     {
-        if(bDupInfo & FDUP_NAME_MATCH)
+        if (bDupInfo & FDUP_NAME_MATCH)
         {
             *pch++ = L'N';
             *pch++ = L',';
         }
 
-        if(bDupInfo & FDUP_SIZE_MATCH)
+        if (bDupInfo & FDUP_SIZE_MATCH)
         {
             *pch++ = L'S';
             *pch++ = L',';
         }
 
-        if(bDupInfo & FDUP_DATE_MATCH)
+        if (bDupInfo & FDUP_DATE_MATCH)
         {
             *pch++ = L'D';
             *pch++ = L',';
         }
 
-        if(bDupInfo & FDUP_HASH_MATCH)
+        if (bDupInfo & FDUP_HASH_MATCH)
         {
             *pch++ = L'H';
             *pch++ = L',';
@@ -276,7 +276,7 @@ void GetDupTypeString(_In_ PFILEINFO pFileInfo, _Inout_z_ PWSTR pszDupType)
 
         // Finally, null-terminate
         *pch = 0;
-    }   
+    }
 }
 
 int CompareFilesByName(_In_ PVOID pLeftFile, _In_ PVOID pRightFile)
