@@ -407,6 +407,12 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
         goto error_return;
     }
 
+    PCHL_HTABLE phtFoldersSeen;
+    if (FAILED(DelEmptyFolders_Init(pDirDeleteFrom, &phtFoldersSeen)))
+    {
+        goto error_return;
+    }
+
     char* pszKey;
     char* pszPreviousKey = NULL;
     PCHL_LLIST pList = NULL;
@@ -448,6 +454,8 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
                 logerr(L"Cannot get item %d for hash string %S", i, pszKey);
                 continue;
             }
+
+            DelEmptyFolders_Add(phtFoldersSeen, pFileInfo);
 
             if ((pFileInfo->fIsDirectory == FALSE) && (IsDuplicateFile(pFileInfo) == TRUE))
             {
@@ -501,9 +509,11 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
         pszPreviousKey = NULL;
     }
 
+    DelEmptyFolders_Delete(phtFoldersSeen);
     return TRUE;
 
 error_return:
+    DelEmptyFolders_Delete(phtFoldersSeen);
     return FALSE;
 }
 
@@ -524,13 +534,19 @@ BOOL DeleteFilesInDir_Hash(
     char szKey[STRLEN_SHA1];
     int nKeySize;
     PFILEINFO pFileToDelete;
-    //PFILEINFO pFileToUpdate;
+
+    PCHL_HTABLE phtFoldersSeen;
+    if (FAILED(DelEmptyFolders_Init(pDirDeleteFrom, &phtFoldersSeen)))
+    {
+        return FALSE;
+    }
 
     int index = 0;
     loginfo(L"Deleting %d files from %s", nFiles, pDirDeleteFrom->pszPath);
     while (index < nFiles)
     {
         pFileToDelete = paFilesToDelete[index++];
+        DelEmptyFolders_Add(phtFoldersSeen, pFileToDelete);
         if (pFileToDelete->fIsDirectory == TRUE)
         {
             continue;
@@ -586,6 +602,7 @@ BOOL DeleteFilesInDir_Hash(
         }
     }
 
+    DelEmptyFolders_Delete(phtFoldersSeen);
     return TRUE;
 }
 
