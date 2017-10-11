@@ -18,8 +18,8 @@ BOOL BuildDirTree_Hash(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir);
 
 // Build the list of files in the given folder
 BOOL BuildFilesInDir_Hash(
-    _In_ PCWSTR pszFolderpath, 
-    _In_opt_ PCHL_QUEUE pqDirsToTraverse, 
+    _In_ PCWSTR pszFolderpath,
+    _In_opt_ PCHL_QUEUE pqDirsToTraverse,
     _Inout_ PDIRINFO* ppDirInfo);
 
 // Given two DIRINFO objects, compare the files in them and set each file's
@@ -38,9 +38,9 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
 // from the pDirDeleteFrom directory and update the other directory files'. The files to
 // be deleted are specified in a list of strings that are the file names.
 BOOL DeleteFilesInDir_Hash(
-    _In_ PDIRINFO pDirDeleteFrom, 
-    _In_ PFILEINFO *paFilesToDelete, 
-    _In_ int nFiles, 
+    _In_ PDIRINFO pDirDeleteFrom,
+    _In_ PFILEINFO *paFilesToDelete,
+    _In_ int nFiles,
     _In_ PDIRINFO pDirToUpdate);
 
 // Print the dir tree in BFS order, two blank lines separating 

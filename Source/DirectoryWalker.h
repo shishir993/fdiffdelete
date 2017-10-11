@@ -19,8 +19,8 @@ BOOL BuildDirTree_NoHash(_In_z_ PCWSTR pszRootpath, _Out_ PDIRINFO* ppRootDir);
 
 // Build the list of files in the given folder
 BOOL BuildFilesInDir_NoHash(
-    _In_ PCWSTR pszFolderpath, 
-    _In_opt_ PCHL_QUEUE pqDirsToTraverse, 
+    _In_ PCWSTR pszFolderpath,
+    _In_opt_ PCHL_QUEUE pqDirsToTraverse,
     _Inout_ PDIRINFO* ppDirInfo);
 
 // Given two DIRINFO objects, compare the files in them and set each file's
@@ -39,9 +39,9 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
 // from the pDirDeleteFrom directory and update the other directory files'. The files to
 // be deleted are specified in a list of strings that are the file names.
 BOOL DeleteFilesInDir_NoHash(
-    _In_ PDIRINFO pDirDeleteFrom, 
-    _In_ PCWSTR paszFileNamesToDelete, 
-    _In_ int nFileNames, 
+    _In_ PDIRINFO pDirDeleteFrom,
+    _In_ PCWSTR paszFileNamesToDelete,
+    _In_ int nFileNames,
     _In_ PDIRINFO pDirToUpdate);
 
 // Print the dir tree in BFS order, two blank lines separating 
