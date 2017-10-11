@@ -65,4 +65,4 @@ inline BOOL IsDuplicateFile(_In_ const PFILEINFO pFileInfo);
 
 void GetDupTypeString(_In_ PFILEINFO pFileInfo, _Inout_z_ PWSTR pszDupType);
 
-BOOL CompareFilesByName(_In_ PVOID pLeftFile, _In_ PVOID pRightFile);
+int CompareFilesByName(_In_ PVOID pLeftFile, _In_ PVOID pRightFile);
