@@ -520,9 +520,12 @@ BOOL DeleteFilesInDir_NoHash(
 
     while (index < nFileNames)
     {
+        PCWSTR pszFileName = paszFileNamesToDelete + (MAX_PATH * index);
+        ++index;
+
         PFILEINFO pFileToDelete;
-        if (SUCCEEDED(CHL_DsFindHT(pDirDeleteFrom->phtFiles, (PCVOID)paszFileNamesToDelete,
-            StringSizeBytes(paszFileNamesToDelete), &pFileToDelete, NULL, TRUE)))
+        if (SUCCEEDED(CHL_DsFindHT(pDirDeleteFrom->phtFiles, (PCVOID)pszFileName,
+            StringSizeBytes(pszFileName), &pFileToDelete, NULL, TRUE)))
         {
             DelEmptyFolders_Add(phtFoldersSeen, pFileToDelete);
 
@@ -533,10 +536,8 @@ BOOL DeleteFilesInDir_NoHash(
         }
         else
         {
-            logwarn(L"Couldn't find file in dir");
+            logwarn(L"Couldn't find file %s in dir %s", pszFileName, pDirDeleteFrom->pszPath);
         }
-
-        ++index;
     }
 
     DelEmptyFolders_Delete(phtFoldersSeen);
