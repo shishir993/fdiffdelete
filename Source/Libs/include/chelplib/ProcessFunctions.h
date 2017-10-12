@@ -28,11 +28,11 @@ extern "C" {
 DllExpImp HRESULT CHL_PsGetProcNameFromID(_In_ DWORD pid, _Inout_z_ WCHAR *pwsProcName, _In_ DWORD dwBufSize);
 DllExpImp HRESULT CHL_PsGetNtHeaders(_In_ HANDLE hMapView, _Out_ PIMAGE_NT_HEADERS *ppstNtHeaders);
 DllExpImp HRESULT CHL_PsGetPtrToCode(
-    _In_ DWORD dwFileBase, 
+    _In_ ULONG_PTR fileBase, 
     _In_ PIMAGE_NT_HEADERS pNTHeaders, 
-    _Out_ PDWORD pdwCodePtr, 
+    _Out_ PULONG_PTR pCodePtr,
     _Out_ PDWORD pdwSizeOfData,
-    _Out_ PDWORD pdwCodeSecVirtAddr);
+    _Out_ PULONG_PTR pCodeSecVirtAddr);
 
 DllExpImp HRESULT CHL_PsGetEnclosingSectionHeader(_In_ DWORD rva, _In_ PIMAGE_NT_HEADERS pNTHeader, _Out_ PIMAGE_SECTION_HEADER *ppstSecHeader);
 

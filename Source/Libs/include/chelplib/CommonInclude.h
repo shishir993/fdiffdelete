@@ -23,6 +23,7 @@ extern "C" {
 #include <errno.h>
 #include <sal.h>
 #include <Commctrl.h>
+#include <intsafe.h>
 
 #ifdef __cplusplus
 }
