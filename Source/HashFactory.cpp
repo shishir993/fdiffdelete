@@ -85,17 +85,17 @@ HRESULT CalculateSHA1(_In_ HCRYPTPROV hCrypt, _In_ HANDLE hFile, _Out_bytecap_c_
         goto fend;
     }
 
-    if (CryptGetHashParam(hHash, HP_HASHVAL, pbHash, &dwHashSize, 0))
+    if (!CryptGetHashParam(hHash, HP_HASHVAL, pbHash, &dwHashSize, 0))
     {
         hr = HRESULT_FROM_WIN32(GetLastError());
-        logerr(L"CryptGetHashParam failed, hr: %x");
+        logerr(L"CryptGetHashParam failed, hr: %x", hr);
         goto fend;
     }
 
 #ifdef _DEBUG
     CHAR szHash[STRLEN_SHA1];
     HashValueToString(pbHash, szHash);
-    wprintf(L"Hash string = [%S]\n", szHash);
+    logdbg(L"Hash string = [%S]", szHash);
 #endif
 
 fend:
