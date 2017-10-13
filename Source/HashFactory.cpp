@@ -60,7 +60,14 @@ HRESULT CalculateSHA1(_In_ HCRYPTPROV hCrypt, _In_ HANDLE hFile, _Out_bytecap_c_
         goto fend;
     }
     
-    if ((200 * MBYTES) <= fileSize.QuadPart)
+    if (fileSize.QuadPart == 0)
+    {
+        static const char szZeroLenHash[] = "\xda\x39\xa3\xee\x5e\x6b\x4b\x0d\x32\x55\xbf\xef\x95\x60\x18\x90\xaf\xd8\x07\x09";
+        static_assert((ARRAYSIZE(szZeroLenHash) - 1) == HASHLEN_SHA1, "Zero length hash size is same as SHA1 hash size");
+        memcpy(pbHash, szZeroLenHash, HASHLEN_SHA1);
+        hr = S_OK;
+    }
+    else if ((200 * MBYTES) <= fileSize.QuadPart)
     {
         hr = _HashFilePieceMeal(hCrypt, hFile, fileSize.QuadPart, pbHash);
     }
