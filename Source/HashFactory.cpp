@@ -10,6 +10,12 @@
 #include "HashFactory.h"
 #include <WinCrypt.h>
 
+#define MBYTES  (1024 * 1024)
+
+static HRESULT _HashFileOneShot(_In_ HCRYPTPROV hCrypt, _In_ HANDLE hFile, _In_ DWORD cbFile, _Out_bytecap_c_(HASHLEN_SHA1) PBYTE pbHash);
+static HRESULT _HashFilePieceMeal(_In_ HCRYPTPROV hCrypt, _In_ HANDLE hFile, _In_ INT64 cbFile, _Out_bytecap_c_(HASHLEN_SHA1) PBYTE pbHash);
+
+
 HRESULT HashFactoryInit(_Out_ HCRYPTPROV *phCrypt)
 {
     HRESULT hr = S_OK;
@@ -45,18 +51,50 @@ HRESULT CalculateSHA1(_In_ HCRYPTPROV hCrypt, _In_ HANDLE hFile, _Out_bytecap_c_
     SB_ASSERT(hCrypt != NULL);
 
     HRESULT hr = S_OK;
+    LARGE_INTEGER fileSize = {};
+
+    if (!GetFileSizeEx(hFile, &fileSize))
+    {
+        hr = HRESULT_FROM_WIN32(GetLastError());
+        logerr(L"GetFileSizeEx failed, hr: %x", hr);
+        goto fend;
+    }
+    
+    if ((200 * MBYTES) <= fileSize.QuadPart)
+    {
+        hr = HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+        logerr(L"File too big");
+        goto fend;
+    }
+
+    hr = _HashFileOneShot(hCrypt, hFile, fileSize.LowPart, pbHash);
+
+#ifdef _DEBUG
+    CHAR szHash[STRLEN_SHA1];
+    HashValueToString(pbHash, szHash);
+    logdbg(L"Hash string = [%S]", szHash);
+#endif
+
+fend:
+    return hr;
+}
+
+void HashValueToString(_In_bytecount_c_(HASHLEN_SHA1) PBYTE pbHash, _Inout_z_ PSTR pszHashValue)
+{
+    for (int i = 0; i < HASHLEN_SHA1; ++i)
+    {
+        sprintf_s(pszHashValue + (i << 1), STRLEN_SHA1 - (i << 1), "%02x", pbHash[i]);
+    }
+    pszHashValue[STRLEN_SHA1 - 1] = 0;
+}
+
+HRESULT _HashFileOneShot(_In_ HCRYPTPROV hCrypt, _In_ HANDLE hFile, _In_ DWORD cbFile, _Out_bytecap_c_(HASHLEN_SHA1) PBYTE pbHash)
+{
+    HRESULT hr = S_OK;
     HCRYPTHASH hHash = NULL;
     HANDLE hMapObj = NULL;
     HANDLE hMapView = NULL;
     DWORD dwHashSize = HASHLEN_SHA1;
-    LARGE_INTEGER fileSize = {};
-
-    if (!CryptCreateHash(hCrypt, CALG_SHA1, NULL, 0, &hHash))
-    {
-        hr = HRESULT_FROM_WIN32(GetLastError());
-        logerr(L"CryptCreateHash() failed");
-        goto fend;
-    }
 
     hr = CHL_GnCreateMemMapOfFile(hFile, PAGE_READONLY, &hMapObj, &hMapView);
     if (FAILED(hr))
@@ -65,20 +103,14 @@ HRESULT CalculateSHA1(_In_ HCRYPTPROV hCrypt, _In_ HANDLE hFile, _Out_bytecap_c_
         goto fend;
     }
 
-    if (!GetFileSizeEx(hFile, &fileSize))
+    if (!CryptCreateHash(hCrypt, CALG_SHA1, NULL, 0, &hHash))
     {
         hr = HRESULT_FROM_WIN32(GetLastError());
-        logerr(L"GetFileSizeEx failed, hr: %x", hr);
-        goto fend;
-    }
-    if (MAXDWORD < fileSize.QuadPart)
-    {
-        hr = HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
-        logerr(L"File too big");
+        logerr(L"CryptCreateHash() failed");
         goto fend;
     }
 
-    if (!CryptHashData(hHash, (PBYTE)hMapView, fileSize.LowPart, 0))
+    if (!CryptHashData(hHash, (PBYTE)hMapView, cbFile, 0))
     {
         hr = HRESULT_FROM_WIN32(GetLastError());
         logerr(L"CryptHashData failed, hr: %x", hr);
@@ -91,12 +123,6 @@ HRESULT CalculateSHA1(_In_ HCRYPTPROV hCrypt, _In_ HANDLE hFile, _Out_bytecap_c_
         logerr(L"CryptGetHashParam failed, hr: %x", hr);
         goto fend;
     }
-
-#ifdef _DEBUG
-    CHAR szHash[STRLEN_SHA1];
-    HashValueToString(pbHash, szHash);
-    logdbg(L"Hash string = [%S]", szHash);
-#endif
 
 fend:
     if (hHash != NULL)
@@ -120,11 +146,7 @@ fend:
     return hr;
 }
 
-void HashValueToString(_In_bytecount_c_(HASHLEN_SHA1) PBYTE pbHash, _Inout_z_ PSTR pszHashValue)
+HRESULT _HashFilePieceMeal(_In_ HCRYPTPROV hCrypt, _In_ HANDLE hFile, _In_ INT64 cbFile, _Out_bytecap_c_(HASHLEN_SHA1) PBYTE pbHash)
 {
-    for (int i = 0; i < HASHLEN_SHA1; ++i)
-    {
-        sprintf_s(pszHashValue + (i << 1), STRLEN_SHA1 - (i << 1), "%02x", pbHash[i]);
-    }
-    pszHashValue[STRLEN_SHA1 - 1] = 0;
+    return E_NOTIMPL;
 }
