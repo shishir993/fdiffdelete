@@ -21,8 +21,9 @@ static BOOL AddToDupWithinList(_In_ PDUPFILES_WITHIN pDupWithin, _In_ PFILEINFO 
 static PFILEINFO FindInDupWithinList(_In_ PCWSTR pszFilename, _In_ PDUPFILES_WITHIN pDupWithinToSearch, _Inout_ int* piStartIndex);
 static BOOL RemoveFromDupWithinList(_In_ PFILEINFO pFileToDelete, _In_ PDUPFILES_WITHIN pDupWithinToSearch);
 
-static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo);
-static BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDeleteFrom, _In_opt_ PDIRINFO pUpdateDir);
+static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _Inout_opt_ CHL_HT_ITERATOR *pFromItr, _In_ PFILEINFO pFileInfo);
+static BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDeleteFrom,
+    _Inout_opt_ CHL_HT_ITERATOR *pFromItr, _In_opt_ PDIRINFO pUpdateDir);
 
 static HRESULT _Init(_In_ PCWSTR pszFolderpath, _In_ BOOL fRecursive, _Out_ PDIRINFO* ppDirInfo)
 {
@@ -366,7 +367,7 @@ void ClearFilesDupFlag_NoHash(_In_ PDIRINFO pDirInfo)
     }
 }
 
-static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
+BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _Inout_opt_ CHL_HT_ITERATOR *pFromItr, _In_ PFILEINFO pFileInfo)
 {
     BOOL fRetVal = TRUE;
 
@@ -386,7 +387,9 @@ static BOOL _DeleteFile(_In_ PDIRINFO pDirInfo, _In_ PFILEINFO pFileInfo)
     }
 
     // Remove from file list
-    if (FAILED(CHL_DsRemoveHT(pDirInfo->phtFiles, pFileInfo->szFilename, StringSizeBytes(pFileInfo->szFilename))))
+    HRESULT hr = (pFromItr != NULL) ? pDirInfo->phtFiles->RemoveAt(pFromItr)
+        : CHL_DsRemoveHT(pDirInfo->phtFiles, pFileInfo->szFilename, StringSizeBytes(pFileInfo->szFilename));
+    if (FAILED(hr))
     {
         // See if file is present in the dup within list
         if (!(RemoveFromDupWithinList(pFileInfo, &pDirInfo->stDupFilesInTree)))
@@ -403,10 +406,11 @@ done:
     return fRetVal;
 }
 
-BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDeleteFrom, _In_opt_ PDIRINFO pUpdateDir)
+BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDeleteFrom,
+    _Inout_opt_ CHL_HT_ITERATOR *pFromItr, _In_opt_ PDIRINFO pUpdateDir)
 {
     SB_ASSERT(pFileToDelete->fIsDirectory == FALSE);
-    if (pUpdateDir)
+    if (pUpdateDir) // BUG Why is this _In_opt_
     {
         // Find this file in the other directory and update that file info
         // to say that it is not a duplicate any more.
@@ -420,7 +424,7 @@ BOOL _DeleteFileUpdateDir(_In_ PFILEINFO pFileToDelete, _In_ PDIRINFO pDeleteFro
     }
 
     // Now, delete file from the specified dir and from file lists
-    return _DeleteFile(pDeleteFrom, pFileToDelete);
+    return _DeleteFile(pDeleteFrom, pFromItr, pFileToDelete);
 }
 
 // Inplace delete of files in a directory. This deletes duplicate files from
@@ -450,37 +454,19 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
     }
 
     PFILEINFO pFileInfo = NULL;
-    PFILEINFO pPrevDupFileInfo = NULL;
     while (SUCCEEDED(itr.GetCurrent(&itr, NULL, NULL, &pFileInfo, NULL, TRUE)))
     {
-        (void)itr.MoveNext(&itr);
-
         DelEmptyFolders_Add(phtFoldersSeen, pFileInfo);
 
-        if (pFileInfo->fIsDirectory == TRUE)
+        if ((pFileInfo->fIsDirectory == FALSE) && IsDuplicateFile(pFileInfo))
         {
-            continue;
+            // itr will be incremented by callee
+            _DeleteFileUpdateDir(pFileInfo, pDirDeleteFrom, &itr, pDirToUpdate);
         }
-
-        // The hashtable iterator expects the currently found entry
-        // not to be removed until we move to the next entry. Hence,
-        // this logic with previous pointer.
-        if (pPrevDupFileInfo)
+        else
         {
-            _DeleteFileUpdateDir(pPrevDupFileInfo, pDirDeleteFrom, pDirToUpdate);
-            pPrevDupFileInfo = NULL;
+            (void)itr.MoveNext(&itr);
         }
-
-        if (IsDuplicateFile(pFileInfo))
-        {
-            pPrevDupFileInfo = pFileInfo;
-        }
-    }
-
-    if (pPrevDupFileInfo)
-    {
-        _DeleteFileUpdateDir(pPrevDupFileInfo, pDirDeleteFrom, pDirToUpdate);
-        pPrevDupFileInfo = NULL;
     }
 
     DelEmptyFolders_Delete(phtFoldersSeen);
@@ -527,7 +513,7 @@ BOOL DeleteFilesInDir_NoHash(
 
             if (pFileToDelete->fIsDirectory == FALSE)
             {
-                _DeleteFileUpdateDir(pFileToDelete, pDirDeleteFrom, pDirToUpdate);
+                _DeleteFileUpdateDir(pFileToDelete, pDirDeleteFrom, NULL, pDirToUpdate);
             }
         }
         else

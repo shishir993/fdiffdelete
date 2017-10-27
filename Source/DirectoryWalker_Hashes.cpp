@@ -411,39 +411,9 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
     }
 
     char* pszKey;
-    char* pszPreviousKey = NULL;
     PCHL_LLIST pList = NULL;
     while (SUCCEEDED(itr.GetCurrent(&itr, &pszKey, NULL, &pList, NULL, TRUE)))
     {
-        (void)itr.MoveNext(&itr);
-
-        if (pszPreviousKey)
-        {
-            if (pDirToUpdate)
-            {
-                // Find this file in the other directory and update that file info
-                // to say that it is not a duplicate any more.
-                PCHL_LLIST pRightList;
-                PFILEINFO pFileToUpdate;
-
-                BOOL fFound = SUCCEEDED(CHL_DsFindHT(pDirToUpdate->phtFiles, pszPreviousKey, strnlen_s(pszPreviousKey, MAX_PATH) + 1,
-                    &pRightList, NULL, TRUE));
-                SB_ASSERT(fFound);    // Must find in the other dir also.
-
-                fFound = SUCCEEDED(CHL_DsPeekAtLL(pRightList, 0, &pFileToUpdate, NULL, TRUE));
-                SB_ASSERT(fFound);
-
-                ClearDuplicateAttr(pFileToUpdate);
-            }
-
-            if (FAILED(CHL_DsRemoveHT(pDirDeleteFrom->phtFiles, pszPreviousKey, STRLEN_SHA1)))
-            {
-                logerr(L"Cannot remove key %s from hashtable", pszPreviousKey);
-                SB_ASSERT(FALSE);
-            }
-            pszPreviousKey = NULL;
-        }
-
         // Foreach file in the linked list...
         PFILEINFO pFileInfo;
         for (int i = 0; i < pList->nCurNodes; ++i)
@@ -477,35 +447,34 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
         if (pList->nCurNodes == 0)
         {
             CHL_DsDestroyLL(pList);
-            pszPreviousKey = pszKey;
-        }
-    }
+            
+            if (pDirToUpdate) // BUG _In_ param, why check for NULL here?
+            {
+                // Find this file in the other directory and update that file info
+                // to say that it is not a duplicate any more.
+                PCHL_LLIST pRightList;
+                PFILEINFO pFileToUpdate;
 
-    if (pszPreviousKey)
-    {
-        if (pDirToUpdate)
+                BOOL fFound = SUCCEEDED(CHL_DsFindHT(pDirToUpdate->phtFiles, pszKey, strnlen_s(pszKey, MAX_PATH) + 1,
+                    &pRightList, NULL, TRUE));
+                SB_ASSERT(fFound);    // Must find in the other dir also.
+
+                fFound = SUCCEEDED(CHL_DsPeekAtLL(pRightList, 0, &pFileToUpdate, NULL, TRUE));
+                SB_ASSERT(fFound);
+
+                ClearDuplicateAttr(pFileToUpdate);
+            }
+
+            if (FAILED(CHL_DsRemoveAtHT(&itr)))
+            {
+                logerr(L"Cannot remove key %s from hashtable", pszKey);
+                SB_ASSERT(FALSE);
+            }
+        }
+        else
         {
-            // Find this file in the other directory and update that file info
-            // to say that it is not a duplicate any more.
-            PCHL_LLIST pRightList;
-            PFILEINFO pFileToUpdate;
-
-            BOOL fFound = SUCCEEDED(CHL_DsFindHT(pDirToUpdate->phtFiles, pszPreviousKey, strnlen_s(pszPreviousKey, MAX_PATH) + 1,
-                &pRightList, NULL, TRUE));
-            SB_ASSERT(fFound);    // Must find in the other dir also.
-
-            fFound = SUCCEEDED(CHL_DsPeekAtLL(pRightList, 0, &pFileToUpdate, NULL, TRUE));
-            SB_ASSERT(fFound);
-
-            ClearDuplicateAttr(pFileToUpdate);
+            (void)itr.MoveNext(&itr);
         }
-
-        if (FAILED(CHL_DsRemoveHT(pDirDeleteFrom->phtFiles, pszPreviousKey, STRLEN_SHA1)))
-        {
-            logerr(L"Cannot remove key %s from hashtable", pszPreviousKey);
-            SB_ASSERT(FALSE);
-        }
-        pszPreviousKey = NULL;
     }
 
     DelEmptyFolders_Delete(phtFoldersSeen);
