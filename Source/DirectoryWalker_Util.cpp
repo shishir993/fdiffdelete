@@ -143,19 +143,16 @@ void DelEmptyFolders_Delete(_In_opt_ PCHL_HTABLE phtFoldersSeen)
         HRESULT hr = phtFoldersSeen->InitIterator(phtFoldersSeen, &itr);
         if (FAILED(hr))
         {
-            logwarn(L"Error deleting empty dirs, hr: %x", hr);
-            goto fend;
+            break;
         }
 
         PCWSTR pszDir = NULL;
         PCWSTR pszPrevDir = NULL;
-        if (FAILED(phtFoldersSeen->GetNext(&itr, &pszDir, NULL, NULL, NULL, TRUE)))
-        {
-            break;
-        }
 
         do
         {
+            itr.GetCurrent(&itr, &pszDir, NULL, NULL, NULL, TRUE);
+
             // The hashtable iterator expects the currently found entry
             // not to be removed until we move to the next entry. Hence,
             // this logic with previous pointer.
@@ -173,7 +170,7 @@ void DelEmptyFolders_Delete(_In_opt_ PCHL_HTABLE phtFoldersSeen)
                 ++nFoldersRemoved;
             }
 
-        } while ((SUCCEEDED(phtFoldersSeen->GetNext(&itr, &pszDir, NULL, NULL, NULL, TRUE))));
+        } while (SUCCEEDED(itr.MoveNext(&itr)));
 
         if (pszPrevDir != NULL)
         {
@@ -181,6 +178,5 @@ void DelEmptyFolders_Delete(_In_opt_ PCHL_HTABLE phtFoldersSeen)
         }
     } while (0 < nFoldersRemoved);
 
-fend:
     phtFoldersSeen->Destroy(phtFoldersSeen);
 }

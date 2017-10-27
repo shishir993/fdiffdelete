@@ -25,7 +25,7 @@
 #define _ASSERT_H
 
 #ifdef __cplusplus
-extern "C" {  
+extern "C" {
 #endif
 
 #include <stdio.h>
@@ -33,12 +33,12 @@ extern "C" {
 
 #ifdef _DEBUG
     void vAssert(const char* psFile, unsigned int uLine);
-	#define ASSERT(x)	\
-		if(x) {}		    \
-		else			    \
-			vAssert(__FILE__, __LINE__)
+#define ASSERT(x)       \
+        if(x) { }       \
+        else            \
+            vAssert(__FILE__, __LINE__)
 #else
-	#define ASSERT(x)
+#define ASSERT(x)
 #endif
 
 #ifdef __cplusplus

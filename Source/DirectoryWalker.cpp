@@ -280,8 +280,7 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
     CHL_HT_ITERATOR itrLeft;
     if (FAILED(CHL_DsInitIteratorHT(pLeftDir->phtFiles, &itrLeft)))
     {
-        logerr(L"Cannot iterate through file list for dir: %s", pLeftDir->pszPath);
-        goto error_return;
+        return TRUE;
     }
 
     WCHAR* pszLeftFile;
@@ -289,8 +288,9 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
     int nLeftKeySize;
 
     logdbg(L"Comparing dirs: %s and %s", pLeftDir->pszPath, pRightDir->pszPath);
-    while (SUCCEEDED(CHL_DsGetNextHT(&itrLeft, &pszLeftFile, &nLeftKeySize, &pLeftFile, NULL, TRUE)))
+    do
     {
+        itrLeft.GetCurrent(&itrLeft, &pszLeftFile, &nLeftKeySize, &pLeftFile, NULL, TRUE);
         if (SUCCEEDED(CHL_DsFindHT(pRightDir->phtFiles, (void*)pszLeftFile, nLeftKeySize, &pRightFile, NULL, TRUE)))
         {
             // Same file found in right dir, compare and mark as duplicate
@@ -309,7 +309,7 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
                 logdbg(L"DupWithin Duplicate %s: %s", (pLeftFile->fIsDirectory ? L"dir" : L"file"), pszLeftFile);
             }
         }
-    }
+    } while (SUCCEEDED(itrLeft.MoveNext(&itrLeft)));
 
     // See if dup within files are duplicate
     for (int i = 0; i < pLeftDir->stDupFilesInTree.nCurFiles; ++i)
@@ -343,9 +343,6 @@ BOOL CompareDirsAndMarkFiles_NoHash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRight
     }
 
     return TRUE;
-
-error_return:
-    return FALSE;
 }
 
 #pragma region FileOperations
@@ -356,17 +353,14 @@ void ClearFilesDupFlag_NoHash(_In_ PDIRINFO pDirInfo)
     if (pDirInfo->nFiles > 0)
     {
         CHL_HT_ITERATOR itr;
-        if (FAILED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
-        {
-            logerr(L"Cannot iterate through file list for dir: %s", pDirInfo->pszPath);
-        }
-        else
+        if (SUCCEEDED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
         {
             PFILEINFO pFileInfo;
             int nValSize;
-            while (SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, &nValSize, TRUE)))
+            while (SUCCEEDED(itr.GetCurrent(&itr, NULL, NULL, &pFileInfo, &nValSize, TRUE)))
             {
                 ClearDuplicateAttr(pFileInfo);
+                (void)itr.MoveNext(&itr);
             }
         }
     }
@@ -457,8 +451,10 @@ BOOL DeleteDupFilesInDir_NoHash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDir
 
     PFILEINFO pFileInfo = NULL;
     PFILEINFO pPrevDupFileInfo = NULL;
-    while (SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, NULL, TRUE)))
+    while (SUCCEEDED(itr.GetCurrent(&itr, NULL, NULL, &pFileInfo, NULL, TRUE)))
     {
+        (void)itr.MoveNext(&itr);
+
         DelEmptyFolders_Add(phtFoldersSeen, pFileInfo);
 
         if (pFileInfo->fIsDirectory == TRUE)
@@ -582,15 +578,15 @@ void PrintFilesInDir_NoHash(_In_ PDIRINFO pDirInfo)
     CHL_HT_ITERATOR itr;
     if (FAILED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
     {
-        logerr(L"CHL_DsInitIteratorHT() failed.");
         return;
     }
 
     wprintf(L"%s\n", pDirInfo->pszPath);
 
     PFILEINFO pFileInfo = NULL;
-    while (SUCCEEDED(CHL_DsGetNextHT(&itr, NULL, NULL, &pFileInfo, NULL, TRUE)))
+    while (SUCCEEDED(itr.GetCurrent(&itr, NULL, NULL, &pFileInfo, NULL, TRUE)))
     {
+        (void)itr.MoveNext(&itr);
         wprintf(L"%10u %c %1d %s\n",
             pFileInfo->llFilesize.LowPart,
             pFileInfo->fIsDirectory ? L'D' : L'F',

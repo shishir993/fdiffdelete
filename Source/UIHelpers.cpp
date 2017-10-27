@@ -271,9 +271,6 @@ static BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo)
 {
     ListView_DeleteAllItems(hList);
 
-    CHL_HT_ITERATOR itr;
-    CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr);
-
     char* pszKey;
     PFILEINFO pFileInfo;
     int nKeySize, nValSize;
@@ -287,8 +284,11 @@ static BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo)
     // For each file in the dir, convert relevant attributes into 
     // strings and insert into the list view row by row.
     BOOL fRetVal = TRUE;
-    while (SUCCEEDED(CHL_DsGetNextHT(&itr, &pszKey, &nKeySize, &pFileInfo, &nValSize, TRUE)))
+    CHL_HT_ITERATOR itr;
+    CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr);
+    while (SUCCEEDED(itr.GetCurrent(&itr, &pszKey, &nKeySize, &pFileInfo, &nValSize, TRUE)))
     {
+        itr.MoveNext(&itr);
         ConstructListViewRow(pFileInfo, apszListRow);
         if (FAILED(CHL_GuiAddListViewRow(hList, apszListRow, ARRAYSIZE(apszListRow), (LPARAM)pFileInfo)))
         {
@@ -333,9 +333,6 @@ BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo, _In_ BOOL fCompar
 
     ListView_DeleteAllItems(hList);
 
-    CHL_HT_ITERATOR itr;
-    CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr);
-
     WCHAR szDupType[10];    // N,S,D,H (name, size, date, hash)
     WCHAR szDateTime[32];   // 08/13/2014 5:55 PM
     WCHAR szSize[16];       // formatted to show KB, MB, GB
@@ -346,10 +343,15 @@ BOOL PopulateFileList(_In_ HWND hList, _In_ PDIRINFO pDirInfo, _In_ BOOL fCompar
     // strings and insert into the list view row by row.
     BOOL fRetVal = TRUE;
 
+    CHL_HT_ITERATOR itr;
+    CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr);
+
     char* pszKey;
     PCHL_LLIST pList = NULL;
-    while (SUCCEEDED(CHL_DsGetNextHT(&itr, &pszKey, NULL, &pList, NULL, TRUE)))
+    while (SUCCEEDED(itr.GetCurrent(&itr, &pszKey, NULL, &pList, NULL, TRUE)))
     {
+        itr.MoveNext(&itr);
+
         // Foreach file in the linked list, insert into list view
         for (int i = 0; i < pList->nCurNodes; ++i)
         {

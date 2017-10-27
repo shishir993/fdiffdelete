@@ -4,7 +4,7 @@
 // Shishir Bhat (http://www.shishirbhat.com)
 // History
 //      09/09/2014 Refactor to store defs in individual headers.
-//		08/04/2015 Make individual headers usable by clients.
+//      08/04/2015 Make individual headers usable by clients.
 //      01/19/2016 Provide a way to test if a CHL_VAL is occupied or not.
 //
 
@@ -38,43 +38,43 @@ typedef int (*CHL_CompareFn)(_In_ PCVOID pvLeft, _In_ PCVOID pvRight);
 // Structures
 
 union _tagCHL_KEYDEF {
-	PSTR pszKey;
-	PWSTR pwszKey;
-	int iKey;
-	UINT uiKey;
-	PVOID pvKey;
+    PSTR pszKey;
+    PWSTR pwszKey;
+    int iKey;
+    UINT uiKey;
+    PVOID pvKey;
 };
 
 union _tagCHL_VALDEF {
-	int iVal;
-	UINT uiVal;
-	double dVal;
-	PSTR pszVal;        // Pointer to ANSI string(value is allocated on heap)
-	PWSTR pwszVal;      // Pointer to wide string(value is allocated on heap)
-	PVOID pvPtr;        // Stores a pointer(any type)(value is allocated on heap)
-	PVOID pvUserObj;    // Pointer to user object(value is allocated on heap)
+    int iVal;
+    UINT uiVal;
+    double dVal;
+    PSTR pszVal;        // Pointer to ANSI string(value is allocated on heap)
+    PWSTR pwszVal;      // Pointer to wide string(value is allocated on heap)
+    PVOID pvPtr;        // Stores a pointer(any type)(value is allocated on heap)
+    PVOID pvUserObj;    // Pointer to user object(value is allocated on heap)
 };
 
 typedef struct CHL_KEY
 {
-	// Num. of bytes as size of key
-	int iKeySize;
+    // Num. of bytes as size of key
+    int iKeySize;
 
-	// Storage for the key
-	union _tagCHL_KEYDEF keyDef;
+    // Storage for the key
+    union _tagCHL_KEYDEF keyDef;
 
 }CHL_KEY, *PCHL_KEY;
 
 typedef struct CHL_VAL
 {
-	// Num. of bytes as size of val
-	int iValSize;
+    // Num. of bytes as size of val
+    int iValSize;
 
     // Magic number to denote whether occupied or not
     UINT magicOccupied;
 
-	// Storage for the value
-	union _tagCHL_VALDEF valDef;
+    // Storage for the value
+    union _tagCHL_VALDEF valDef;
 
 }CHL_VAL, *PCHL_VAL;
 

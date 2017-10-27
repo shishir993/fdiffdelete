@@ -10,13 +10,13 @@
 #define _DBGHELPERS_H
 
 #ifdef __cplusplus
-extern "C" {  
+extern "C" {
 #endif
 
 /**
- * Original work from http://c.learncodethehardway.org/book/ex20.html
- * Modified/additions to my liking
- */
+* Original work from http://c.learncodethehardway.org/book/ex20.html
+* Modified/additions to my liking
+*/
 
 #define logtrace(M, ...) fprintf(stderr, "[TRACE]  " M "\n", ##__VA_ARGS__)
 #define logerr(M, ...)  fprintf(stderr, "[ERROR] " M "(lastError: %u)\n", ##__VA_ARGS__, GetLastError())
@@ -25,15 +25,15 @@ extern "C" {
 
 #ifdef _DEBUG
 
-    #define logdbg(M, ...)  fprintf(stdout, "[DEBUG] " M "\n", ##__VA_ARGS__)
+#define logdbg(M, ...)  fprintf(stdout, "[DEBUG] " M "\n", ##__VA_ARGS__)
 
-    #define DBG_MEMSET(mem, size) ( memset(mem, 0xCE, size) )
+#define DBG_MEMSET(mem, size) ( memset(mem, 0xCE, size) )
 
 #else
-    #define logdbg(M, ...)
-    
-    #define NDBG_MEMSET(mem, size) ( memset(mem, 0x00, size) )
-    #define DBG_MEMSET(mem, size)   NDBG_MEMSET(mem, size)
+#define logdbg(M, ...)
+
+#define NDBG_MEMSET(mem, size) ( memset(mem, 0x00, size) )
+#define DBG_MEMSET(mem, size)   NDBG_MEMSET(mem, size)
 #endif
 
 #ifdef __cplusplus

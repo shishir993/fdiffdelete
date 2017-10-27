@@ -5,14 +5,14 @@
 // History
 //      06/23/13 Initial version
 //      09/18/2014 Standardize keys and value types
-//		08/04/2015 Make individual headers usable by clients
+//      08/04/2015 Make individual headers usable by clients
 //
 
 #ifndef _COMMONINCLUDE_H
 #define _COMMONINCLUDE_H
 
 #ifdef __cplusplus
-extern "C" {  
+extern "C" {
 #endif
 
 #include <stdio.h>

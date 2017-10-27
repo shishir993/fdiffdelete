@@ -43,32 +43,32 @@ struct _bstTree {
     CHL_VALTYPE valType;
     BOOL        fValIsInHeap;
     PBSTNODE    pRoot;
-    
+
     CHL_CompareFn fnKeyCompare;
 
     // Pointers to binary search tree methods
 
-    HRESULT (*Create)
+    HRESULT(*Create)
         (
             _Out_ PCHL_BSTREE pbst,
             _In_ CHL_KEYTYPE keyType,
             _In_ CHL_VALTYPE valType,
             _In_ CHL_CompareFn pfnKeyCompare,
             _In_opt_ BOOL fValInHeapMem
-        );
+            );
 
-    HRESULT (*Destroy)(_In_ PCHL_BSTREE pbst);
+    HRESULT(*Destroy)(_In_ PCHL_BSTREE pbst);
 
-    HRESULT (*Insert)
+    HRESULT(*Insert)
         (
             _In_ PCHL_BSTREE pbst,
             _In_ PCVOID pvkey,
             _In_ int iKeySize,
             _In_ PCVOID pvVal,
             _In_ int iValSize
-        );
+            );
 
-    HRESULT (*Find)
+    HRESULT(*Find)
         (
             _In_ PCHL_BSTREE pbst,
             _In_ PCVOID pvkey,
@@ -76,35 +76,25 @@ struct _bstTree {
             _Inout_opt_ PVOID pvVal,
             _Inout_opt_ PINT pValsize,
             _In_opt_ BOOL fGetPointerOnly
-        );
+            );
 
-    HRESULT (*FindMax)
+    HRESULT(*FindMax)
         (
             _In_ PCHL_BSTREE pbst,
             _Inout_opt_ PVOID pvKeyOut,
             _Inout_opt_ PINT pKeySizeOut,
             _In_opt_ BOOL fGetPointerOnly
-        );
+            );
 
-    HRESULT (*FindMin)
+    HRESULT(*FindMin)
         (
             _In_ PCHL_BSTREE pbst,
             _Inout_opt_ PVOID pvKeyOut,
             _Inout_opt_ PINT pKeySizeOut,
             _In_opt_ BOOL fGetPointerOnly
-        );
+            );
 
-    HRESULT (*FindFloor)
-        (
-            _In_ PCHL_BSTREE pbst,
-            _In_ PCVOID pvKey,
-            _In_ int iKeySize,
-            _Inout_opt_ PVOID pvKeyOut,
-            _Inout_opt_ PINT pKeySizeOut,
-            _In_opt_ BOOL fGetPointerOnly
-        );
-
-    HRESULT (*FindCeil)
+    HRESULT(*FindFloor)
         (
             _In_ PCHL_BSTREE pbst,
             _In_ PCVOID pvKey,
@@ -112,16 +102,26 @@ struct _bstTree {
             _Inout_opt_ PVOID pvKeyOut,
             _Inout_opt_ PINT pKeySizeOut,
             _In_opt_ BOOL fGetPointerOnly
-        );
+            );
 
-    HRESULT (*InitIterator)
+    HRESULT(*FindCeil)
+        (
+            _In_ PCHL_BSTREE pbst,
+            _In_ PCVOID pvKey,
+            _In_ int iKeySize,
+            _Inout_opt_ PVOID pvKeyOut,
+            _Inout_opt_ PINT pKeySizeOut,
+            _In_opt_ BOOL fGetPointerOnly
+            );
+
+    HRESULT(*InitIterator)
         (
             _Out_ PCHL_BST_ITERATOR pItr,
             _In_ PCHL_BSTREE pbst,
             _In_ CHL_BstIterationType itrType
             );
 
-    HRESULT (*GetNext)
+    HRESULT(*GetNext)
         (
             _In_ PCHL_BST_ITERATOR pItr,
             _Inout_opt_ PCVOID pvKey,
@@ -129,7 +129,7 @@ struct _bstTree {
             _Inout_opt_ PVOID pvVal,
             _Inout_opt_ PINT pValSize,
             _In_opt_ BOOL fGetPointerOnly
-        );
+            );
 
 };
 
@@ -149,7 +149,7 @@ struct _bstIterator {
             _Inout_opt_ PVOID pvVal,
             _Inout_opt_ PINT pValSize,
             _In_opt_ BOOL fGetPointerOnly
-        );
+            );
 };
 
 
@@ -329,7 +329,7 @@ DllExpImp HRESULT CHL_DsInitIteratorBST
 //
 DllExpImp HRESULT CHL_DsGetNextBST
 (
-    _In_ PCHL_BST_ITERATOR pItr, 
+    _In_ PCHL_BST_ITERATOR pItr,
     _Inout_opt_ PVOID pvKey,
     _Inout_opt_ PINT pKeysize,
     _Inout_opt_ PVOID pvVal,

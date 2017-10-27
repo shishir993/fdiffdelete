@@ -64,8 +64,9 @@ void DestroyDirInfo_Hash(_In_ PDIRINFO pDirInfo)
 
         if (SUCCEEDED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
         {
-            while (SUCCEEDED(CHL_DsGetNextHT(&itr, &pszHash, &nKeySize, &pList, NULL, TRUE)))
+            while (SUCCEEDED(itr.GetCurrent(&itr, &pszHash, &nKeySize, &pList, NULL, TRUE)))
             {
+                (void)itr.MoveNext(&itr);
                 SB_ASSERT(pList);
                 CHL_DsDestroyLL(pList);
             }
@@ -274,8 +275,7 @@ BOOL CompareDirsAndMarkFiles_Hash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDi
     CHL_HT_ITERATOR itrLeft;
     if (FAILED(CHL_DsInitIteratorHT(pLeftDir->phtFiles, &itrLeft)))
     {
-        logerr(L"Cannot iterate through file list for dir: %s", pLeftDir->pszPath);
-        goto error_return;
+        return TRUE;
     }
 
     char* pszLeftHash;
@@ -284,9 +284,11 @@ BOOL CompareDirsAndMarkFiles_Hash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDi
     PCHL_LLIST pLeftList, pRightList;
 
     logdbg(L"Comparing dirs: %s and %s", pLeftDir->pszPath, pRightDir->pszPath);
-    while (SUCCEEDED(CHL_DsGetNextHT(&itrLeft, &pszLeftHash, &nLeftKeySize, &pLeftList, NULL, TRUE)))
+    while (SUCCEEDED(itrLeft.GetCurrent(&itrLeft, &pszLeftHash, &nLeftKeySize, &pLeftList, NULL, TRUE)))
     {
-        PCHL_LLIST pTemp;	// TODO: why is this here?
+        (void)itrLeft.MoveNext(&itrLeft);
+
+        PCHL_LLIST pTemp;   // TODO: why is this here?
         CHL_DsFindHT(pLeftDir->phtFiles, pszLeftHash, nLeftKeySize, &pTemp, NULL, TRUE);
 
         if (SUCCEEDED(CHL_DsFindHT(pRightDir->phtFiles, pszLeftHash, nLeftKeySize, &pRightList, NULL, TRUE)))
@@ -321,9 +323,6 @@ BOOL CompareDirsAndMarkFiles_Hash(_In_ PDIRINFO pLeftDir, _In_ PDIRINFO pRightDi
     }
 
     return TRUE;
-
-error_return:
-    return FALSE;
 }
 
 #pragma region FileOperations
@@ -360,16 +359,14 @@ void ClearFilesDupFlag_Hash(_In_ PDIRINFO pDirInfo)
     if (pDirInfo->nFiles > 0)
     {
         CHL_HT_ITERATOR itr;
-        if (FAILED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
-        {
-            logerr(L"Cannot iterate through file list for dir: %s", pDirInfo->pszPath);
-        }
-        else
+        if (SUCCEEDED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
         {
             char* pszKey;
             PCHL_LLIST pList;
-            while (SUCCEEDED(CHL_DsGetNextHT(&itr, &pszKey, NULL, &pList, NULL, TRUE)))
+            while (SUCCEEDED(itr.GetCurrent(&itr, &pszKey, NULL, &pList, NULL, TRUE)))
             {
+                (void)itr.MoveNext(&itr);
+
                 // Foreach file in the linked list...
                 PFILEINFO pFileInfo;
                 for (int i = 0; i < pList->nCurNodes; ++i)
@@ -416,8 +413,10 @@ BOOL DeleteDupFilesInDir_Hash(_In_ PDIRINFO pDirDeleteFrom, _In_ PDIRINFO pDirTo
     char* pszKey;
     char* pszPreviousKey = NULL;
     PCHL_LLIST pList = NULL;
-    while (SUCCEEDED(CHL_DsGetNextHT(&itr, &pszKey, NULL, &pList, NULL, TRUE)))
+    while (SUCCEEDED(itr.GetCurrent(&itr, &pszKey, NULL, &pList, NULL, TRUE)))
     {
+        (void)itr.MoveNext(&itr);
+
         if (pszPreviousKey)
         {
             if (pDirToUpdate)
@@ -623,7 +622,6 @@ void PrintFilesInDir_Hash(_In_ PDIRINFO pDirInfo)
     CHL_HT_ITERATOR itr;
     if (FAILED(CHL_DsInitIteratorHT(pDirInfo->phtFiles, &itr)))
     {
-        logerr(L"CHL_DsInitIteratorHT() failed.");
         return;
     }
 
@@ -631,8 +629,10 @@ void PrintFilesInDir_Hash(_In_ PDIRINFO pDirInfo)
 
     char* pszKey = NULL;
     PCHL_LLIST pList = NULL;
-    while (SUCCEEDED(CHL_DsGetNextHT(&itr, &pszKey, NULL, &pList, NULL, TRUE)))
+    while (SUCCEEDED(itr.GetCurrent(&itr, &pszKey, NULL, &pList, NULL, TRUE)))
     {
+        (void)itr.MoveNext(&itr);
+
         // Foreach file in the linked list...
         PFILEINFO pFileInfo;
         for (int i = 0; i < pList->nCurNodes; ++i)
